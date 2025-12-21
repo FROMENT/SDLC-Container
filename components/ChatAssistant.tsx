@@ -43,7 +43,7 @@ export const ChatAssistant: React.FC = () => {
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
       {isOpen && (
-        <div className="bg-card-bg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-96 h-[500px] flex flex-col mb-4 overflow-hidden animate-fade-in-up">
+        <div className="bg-white dark:bg-card-bg border border-gray-300 dark:border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-96 h-[500px] flex flex-col mb-4 overflow-hidden animate-fade-in-up">
           {/* Header */}
           <div className="bg-sec-red px-4 py-3 flex justify-between items-center text-white">
             <div className="flex items-center gap-2">
@@ -56,14 +56,14 @@ export const ChatAssistant: React.FC = () => {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-dark-bg">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-dark-bg">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div 
-                  className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
+                  className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-sm ${
                     msg.role === 'user' 
                       ? 'bg-blue-600 text-white rounded-br-none' 
-                      : 'bg-gray-800 text-gray-200 rounded-bl-none border border-gray-700'
+                      : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-none border border-gray-300 dark:border-gray-700'
                   }`}
                 >
                   {msg.text}
@@ -72,11 +72,11 @@ export const ChatAssistant: React.FC = () => {
             ))}
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-gray-800 rounded-2xl px-4 py-3 border border-gray-700">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 border border-gray-300 dark:border-gray-700 shadow-sm">
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-75"></div>
-                    <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-150"></div>
+                    <div className="w-2 h-2 bg-gray-500 dark:bg-gray-500 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-500 dark:bg-gray-500 rounded-full animate-bounce delay-75"></div>
+                    <div className="w-2 h-2 bg-gray-500 dark:bg-gray-500 rounded-full animate-bounce delay-150"></div>
                   </div>
                 </div>
               </div>
@@ -85,7 +85,7 @@ export const ChatAssistant: React.FC = () => {
           </div>
 
           {/* Input */}
-          <div className="p-3 border-t border-gray-700 bg-card-bg">
+          <div className="p-3 border-t border-gray-300 dark:border-gray-700 bg-white dark:bg-card-bg">
             <div className="flex gap-2">
               <input 
                 type="text" 
@@ -93,12 +93,12 @@ export const ChatAssistant: React.FC = () => {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="Ask about CVEs, PSS, OPA..."
-                className="flex-1 bg-gray-900 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sec-red"
+                className="flex-1 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sec-red dark:focus:border-sec-red transition-colors"
               />
               <button 
                 onClick={handleSend}
                 disabled={isLoading || !input.trim()}
-                className="bg-sec-red text-white p-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-sec-red text-white p-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
               >
                 <Send className="w-4 h-4" />
               </button>

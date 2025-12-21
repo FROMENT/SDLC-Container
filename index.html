@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             colors: {
@@ -31,11 +32,18 @@
               'fade-in-up': {
                 '0%': { opacity: '0', transform: 'translateY(20px)' },
                 '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              scan: {
+                '0%': { top: '0%', opacity: '0' },
+                '15%': { opacity: '1' },
+                '85%': { opacity: '1' },
+                '100%': { top: '100%', opacity: '0' },
               }
             },
             animation: {
               'fade-in': 'fade-in 0.5s ease-out',
               'fade-in-up': 'fade-in-up 0.5s ease-out',
+              'scan': 'scan 3s cubic-bezier(0.4, 0, 0.2, 1) infinite',
             }
           },
         },
@@ -45,23 +53,35 @@
     <style>
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #0f1219;
-        color: #e2e8f0;
+        /* Default to dark mode colors, overridden by classes */
+        background-color: #f9fafb; /* Gray-50 */
       }
+      .dark body {
+        background-color: #0f1219;
+      }
+      
       /* Custom scrollbar */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
       }
       ::-webkit-scrollbar-track {
+        background: #e5e7eb; 
+      }
+      .dark ::-webkit-scrollbar-track {
         background: #1b1f2b; 
       }
+
       ::-webkit-scrollbar-thumb {
-        background: #475569; 
+        background: #9ca3af; 
         border-radius: 4px;
       }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #475569; 
+      }
+      
       ::-webkit-scrollbar-thumb:hover {
-        background: #64748b; 
+        background: #6b7280; 
       }
     </style>
   <script type="importmap">

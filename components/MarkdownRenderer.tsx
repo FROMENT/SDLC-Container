@@ -20,7 +20,7 @@ export const MarkdownRenderer: React.FC<Props> = ({ content }) => {
 
   const flushList = () => {
     if (listBuffer.length > 0) {
-      elements.push(<ul key={`list-${elements.length}`} className="list-disc pl-6 mb-4 space-y-1 text-gray-300">{[...listBuffer]}</ul>);
+      elements.push(<ul key={`list-${elements.length}`} className="list-disc pl-6 mb-4 space-y-1 text-gray-900 dark:text-gray-300">{[...listBuffer]}</ul>);
       listBuffer = [];
     }
   };
@@ -41,8 +41,8 @@ export const MarkdownRenderer: React.FC<Props> = ({ content }) => {
       flushTable();
       if (inCodeBlock) {
         elements.push(
-          <div key={`code-${index}`} className="my-4 bg-gray-900 rounded-lg p-4 overflow-x-auto border border-gray-700">
-            <pre className="text-sm font-mono text-green-400">
+          <div key={`code-${index}`} className="my-4 bg-gray-100 dark:bg-gray-900 rounded-lg p-4 overflow-x-auto border border-gray-300 dark:border-gray-700 shadow-sm">
+            <pre className="text-sm font-mono text-emerald-900 dark:text-green-400">
               {codeBlockContent.join('\n')}
             </pre>
           </div>
@@ -80,17 +80,17 @@ export const MarkdownRenderer: React.FC<Props> = ({ content }) => {
 
     // Headers
     if (line.startsWith('### ')) {
-      elements.push(<h3 key={index} className="text-xl font-bold text-white mt-6 mb-3">{line.replace('### ', '')}</h3>);
+      elements.push(<h3 key={index} className="text-xl font-bold text-gray-900 dark:text-white mt-6 mb-3">{line.replace('### ', '')}</h3>);
     } else if (line.startsWith('## ')) {
-      elements.push(<h2 key={index} className="text-2xl font-bold text-sec-red mt-8 mb-4 border-b border-gray-700 pb-2">{line.replace('## ', '')}</h2>);
+      elements.push(<h2 key={index} className="text-2xl font-bold text-sec-red mt-8 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">{line.replace('## ', '')}</h2>);
     } else if (line.startsWith('# ')) {
-      elements.push(<h1 key={index} className="text-3xl font-bold text-white mt-4 mb-6">{line.replace('# ', '')}</h1>);
+      elements.push(<h1 key={index} className="text-3xl font-bold text-gray-900 dark:text-white mt-4 mb-6">{line.replace('# ', '')}</h1>);
     } 
     // Empty lines
     else if (trimmedLine === '') {
       // ignore
     } else {
-      elements.push(<p key={index} className="mb-3 text-gray-300 leading-relaxed">{parseInline(line)}</p>);
+      elements.push(<p key={index} className="mb-3 text-gray-900 dark:text-gray-300 leading-relaxed">{parseInline(line)}</p>);
     }
   });
    
@@ -105,10 +105,10 @@ const parseInline = (text: string): React.ReactNode => {
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={i} className="bg-gray-800 text-yellow-300 px-1 py-0.5 rounded text-sm font-mono">{part.slice(1, -1)}</code>;
+      return <code key={i} className="bg-gray-200 dark:bg-gray-800 text-pink-800 dark:text-yellow-300 px-1 py-0.5 rounded text-sm font-mono border border-gray-300 dark:border-gray-700">{part.slice(1, -1)}</code>;
     }
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i} className="text-white font-semibold">{part.slice(2, -2)}</strong>;
+      return <strong key={i} className="text-black dark:text-white font-bold">{part.slice(2, -2)}</strong>;
     }
     return part;
   });
@@ -129,20 +129,20 @@ const renderTable = (rows: string[], key: string) => {
     const bodyRows = rows.slice(2).map(parseRow);
 
     return (
-        <div key={key} className="my-6 overflow-x-auto rounded-lg border border-gray-700 shadow-md">
-            <table className="min-w-full divide-y divide-gray-700 bg-gray-800/40 text-left text-sm text-gray-300">
-                <thead className="bg-gray-900 font-medium text-white">
+        <div key={key} className="my-6 overflow-x-auto rounded-lg border border-gray-300 dark:border-gray-700 shadow-md">
+            <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-700 bg-white dark:bg-gray-800/40 text-left text-sm text-gray-900 dark:text-gray-300">
+                <thead className="bg-gray-100 dark:bg-gray-900 font-medium text-gray-900 dark:text-white">
                     <tr>
                         {headerCols.map((h, i) => (
-                            <th key={i} className="px-4 py-3 border-r border-gray-700 last:border-r-0 whitespace-nowrap">{h}</th>
+                            <th key={i} className="px-4 py-3 border-r border-gray-300 dark:border-gray-700 last:border-r-0 whitespace-nowrap">{h}</th>
                         ))}
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-700">
+                <tbody className="divide-y divide-gray-300 dark:divide-gray-700">
                     {bodyRows.map((row, i) => (
-                        <tr key={i} className="hover:bg-gray-800/60 transition-colors">
+                        <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors">
                             {row.map((cell, j) => (
-                                <td key={j} className="px-4 py-3 border-r border-gray-700 last:border-r-0 whitespace-pre-wrap">
+                                <td key={j} className="px-4 py-3 border-r border-gray-300 dark:border-gray-700 last:border-r-0 whitespace-pre-wrap">
                                     {parseInline(cell)}
                                 </td>
                             ))}

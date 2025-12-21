@@ -48,7 +48,8 @@ COPY --from=builder /app/myapp /
 CMD ["/myapp"]
 \`\`\`
     `,
-    newsContext: 'Recent vulnerabilities in standard base images (glibc, openssl), updates to Wolfi OS, and trends in "chainguard" images.'
+    newsContext: 'Recent vulnerabilities in standard base images (glibc, openssl), updates to Wolfi OS, and trends in "chainguard" images.',
+    securityTip: 'Update: Use **Docker Scout** (GA Dec 2023) to analyze base images. It provides deeper insights than traditional scanners by correlating CVEs with your specific application usage.'
   },
   {
     id: 'secure-architecture',
@@ -75,7 +76,91 @@ Security cannot be "bolted on" at the end. It must be architected from the start
 *   **D**enial of Service: Can one pod crash the node? (Solution: Limits & Requests)
 *   **E**levation of Privilege: Can a container escape to host? (Solution: no-new-privs, non-root)
     `,
-    newsContext: 'New architectural patterns in Kubernetes 1.29+, updates to "Zero Trust" definitions by NIST/CISA regarding containers.'
+    newsContext: 'New architectural patterns in Kubernetes 1.29+, updates to "Zero Trust" definitions by NIST/CISA regarding containers.',
+    securityTip: 'Architecture Tip: Design for **Isolation**. Kubernetes 1.28+ introduced native support for SidecarContainers, ensuring security sidecars start *before* your main application.'
+  },
+  {
+    id: 'metadata-testing-design',
+    title: 'Metadata & Testing Strategy',
+    phase: SDLCPhase.DESIGN,
+    shortDesc: 'Labeling standards, non-regression, and security gates.',
+    staticContent: `
+### Designing for Governance & Verification
+
+Before writing code, establish the "Contract" for your containers. This includes how they are identified (Labels) and how their security is verified (Testing Strategy).
+
+#### 1. Kubernetes Labeling Standards
+Labels are the primary grouping mechanism in K8s. A consistent taxonomy is vital for Network Policies, Reporting, and Automation.
+
+**Recommended Standard Labels (kubernetes.io):**
+\`\`\`yaml
+metadata:
+  labels:
+    app.kubernetes.io/name: my-app
+    app.kubernetes.io/instance: my-app-prod
+    app.kubernetes.io/version: "1.2.0"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: billing-system
+    app.kubernetes.io/managed-by: helm
+\`\`\`
+
+**Security Labels:**
+*   \`data-classification: restricted\` (Used by Policy engines to enforce encryption).
+*   \`compliance: pci-dss\` (triggers specific audit logs).
+*   \`owner: team-security\` (Contact point for incidents).
+
+#### 2. Security Testing Strategy
+Security testing must be automated to prevent **Regression** (re-introducing fixed vulnerabilities).
+
+| Test Type | Phase | Tool Example | Goal |
+| :--- | :--- | :--- | :--- |
+| **Linting** | Design/Dev | \`kube-linter\`, \`hadolint\` | Check YAML/Dockerfile syntax & best practices. |
+| **Policy Unit Tests** | Design/Build | \`opa test\` | **Non-regression** for Policy-as-Code. Ensure a policy change doesn't accidentally allow root containers. |
+| **SAST** | Build | \`semgrep\` | Find code flaws. |
+| **DAST** | Staging | \`owasp-zap\` | Attack running app. |
+
+#### 3. Designing Non-Regression
+When a security bug is found:
+1.  Fix the bug.
+2.  Write a **Negative Test Case** (e.g., a "bad" manifest that *should* fail validation).
+3.  Add it to the CI suite.
+    `,
+    newsContext: 'Updates to Kubernetes Recommended Labels, trends in "Policy Testing" (Rego unit testing), and best practices for non-regression in IaC.',
+    securityTip: 'Governance: Enforce the presence of the `owner` label using an Admission Controller. If a pod crashes or triggers an alert, you immediately know who to page.'
+  },
+  {
+    id: 'threat-modeling',
+    title: 'Threat Modeling Fundamentals',
+    phase: SDLCPhase.DESIGN,
+    shortDesc: 'Deep dive into STRIDE and risk analysis.',
+    staticContent: `
+### Systematic Risk Analysis
+
+Threat modeling is the process of identifying, enumerating, and prioritizing potential threats. We use the **STRIDE** methodology to systematically analyze container architectures.
+
+#### STRIDE in Detail for Kubernetes
+
+| Threat | Definition | Container Context | Mitigation |
+| :--- | :--- | :--- | :--- |
+| **S**poofing | Impersonating something or someone. | A rogue pod claims the IP of a DB service. | **mTLS** (Istio/Linkerd), Network Policies. |
+| **T**ampering | Modifying data or code. | Injecting malware into a base image. | **Image Signing** (Cosign), Read-only Root FS. |
+| **R**epudiation | Claiming not to have performed an action. | A developer \`kubectl delete\`s a deployment without logs. | **Audit Logs**, Remote logging (Fluentd/Splunk). |
+| **I**nformation Disclosure | Exposing information to unauthorized users. | Leaking secrets in ENV vars or logs. | **External Secrets**, Encryption at Rest. |
+| **D**enial of Service | Denying service to valid users. | A container consumes 100% CPU, starving others. | **Resource Quotas**, LimitRanges. |
+| **E**levation of Privilege | Gaining capabilities without authorization. | Container escape to host (privilege escalation). | **Pod Security Standards** (Restricted), Seccomp. |
+
+#### Data Flow Diagrams (DFD)
+To apply STRIDE effectively, create a DFD of your cluster:
+1.  **External Entities**: Users, CI/CD systems.
+2.  **Processes**: Pods, Deployments, Operators.
+3.  **Data Stores**: Persistent Volumes, ConfigMaps, Secrets, Databases.
+4.  **Data Flows**: Network traffic (Ingress/Egress).
+5.  **Trust Boundaries**: Namespace boundaries, Cluster perimeter.
+
+*Apply STRIDE to every element crossing a Trust Boundary.*
+    `,
+    newsContext: 'Evolution of threat modeling tools (OWASP Threat Dragon), new automated threat modeling for cloud-native applications, and shifts in the threat landscape.',
+    securityTip: 'Modeling Tip: When modeling AI/ML containers, explicitly add **Model Poisoning** (Tampering) and **Inference API Exhaustion** (DoS) to your STRIDE analysis.'
   },
   {
     id: 'data-compliance',
@@ -111,7 +196,8 @@ spec:
 *   **At Rest**: Use KMS plugins to encrypt Secrets in etcd. Ensure Persistent Volumes (PVs) are encrypted by the storage provider.
 *   **In Transit**: Enforce TLS 1.2+ everywhere. Use Service Mesh (Istio/Linkerd) to transparently upgrade TCP to mTLS.
     `,
-    newsContext: 'Updates on GDPR fines related to cloud data, PCI-DSS v4.0 container requirements, and "Sovereign Cloud" architectural trends.'
+    newsContext: 'Updates on GDPR fines related to cloud data, PCI-DSS v4.0 container requirements, and "Sovereign Cloud" architectural trends.',
+    securityTip: 'Compliance: Use **Open Policy Agent (OPA)** to technically enforce residency. Deny Pod creation if the `nodeSelector` does not match the allowed region.'
   },
   {
     id: 'supply-chain',
@@ -141,7 +227,8 @@ syft packages:alpine:latest -o json > sbom.json
 cosign sign --key cosign.key my-registry/my-image:v1.0.0
 \`\`\`
     `,
-    newsContext: 'Recent supply chain attacks (like xz utils backdoor), updates to the SLSA specification, and adoption of SBOMs in government regulation.'
+    newsContext: 'Recent supply chain attacks (like xz utils backdoor), updates to the SLSA specification, and adoption of SBOMs in government regulation.',
+    securityTip: 'Tooling Update: Use `docker buildx build --attest type=provenance,mode=max` to automatically generate detailed **SLSA provenance** attestations attached to your image.'
   },
   {
     id: 'build-strategies',
@@ -169,7 +256,123 @@ RUN --mount=type=secret,id=mysecret \
     ./script-requiring-secret.sh
 \`\`\`
     `,
-    newsContext: 'New features in Docker BuildKit, security risks in CI/CD pipelines (GitHub Actions runners), and "Leaky Vessels" vulnerabilities.'
+    newsContext: 'New features in Docker BuildKit, security risks in CI/CD pipelines (GitHub Actions runners), and "Leaky Vessels" vulnerabilities.',
+    securityTip: 'Optimization: Consider **Docker Build Cloud** (released 2024) to ensure builds run in a consistent, ephemeral, and secure environment, avoiding "works on my machine" security drifts.'
+  },
+  {
+    id: 'multi-stage-lifecycle',
+    title: 'Multi-Stage Lifecycle',
+    phase: SDLCPhase.BUILD,
+    shortDesc: 'Unifying Dev, Test (Recette), and Prod in one Dockerfile.',
+    staticContent: `
+### One Dockerfile, Three Environments
+
+Multi-stage builds are not just for shrinking images. They allow you to define your entire Software Development Life Cycle (SDLC) — **Dev, Test/Recette, and Prod** — within a single file.
+
+#### 1. "Début" (Development Stage)
+In the development stage, we need hot-reloading, debuggers, and full SDKs. We target this stage locally.
+
+\`\`\`dockerfile
+# Base Stage (Common dependencies)
+FROM node:20-alpine AS base
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+# Stage: Development
+# Includes tools like nodemon and full devDependencies
+FROM base AS dev
+RUN npm install -g nodemon
+COPY . .
+CMD ["nodemon", "server.js"]
+\`\`\`
+
+#### 2. "Recette" (Testing Stage)
+Before building the artifact, we run tests inside the container. If this stage fails, the image build stops.
+
+\`\`\`dockerfile
+# Stage: Tester (Recette)
+FROM base AS tester
+COPY . .
+# Run linting and unit tests inside the build process
+RUN npm run lint
+RUN npm run test
+\`\`\`
+
+#### 3. "Déploiement" (Production Stage)
+Finally, we create the lean, secure artifact. We copy *only* what is needed from previous stages.
+
+\`\`\`dockerfile
+# Stage: Production (Déploiement)
+FROM gcr.io/distroless/nodejs20-debian11 AS prod
+WORKDIR /app
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/package.json ./
+COPY --from=base /app/server.js ./
+CMD ["server.js"]
+\`\`\`
+
+#### Usage
+*   **For Dev:** \`docker build --target dev -t myapp:dev .\`
+*   **For CI/Recette:** \`docker build --target tester .\`
+*   **For Prod:** \`docker build --target prod -t myapp:prod .\`
+    `,
+    newsContext: 'Adoption of "Hermetic Builds" where testing happens strictly inside containers to avoid "works on my machine" issues.',
+    securityTip: 'Isolation: By running tests (Recette) in a separate stage, test secrets, test data, and test-runner code are never copied into the final Production image.'
+  },
+  {
+    id: 'security-testing',
+    title: 'Code & Dependency Scanning',
+    phase: SDLCPhase.BUILD,
+    shortDesc: 'SAST, SCA, and Image Vulnerability Testing.',
+    staticContent: `
+### Shift Left: Automated Security Testing
+
+Detecting vulnerabilities during the Build phase is significantly cheaper and safer than finding them in Production.
+
+#### 1. Static Application Security Testing (SAST)
+**"White Box" Testing**: Analyzes source code for security flaws without running it.
+*   **Detects**: SQL Injection, XSS, Buffer Overflows, Hardcoded Credentials.
+*   **Tools**: SonarQube, CodeQL, Semgrep.
+
+#### 2. Software Composition Analysis (SCA)
+**"Supply Chain" Testing**: Analyzes open-source libraries and frameworks imported by your code.
+*   **Detects**: Known CVEs in \`node_modules\`, \`pip\`, \`go.mod\`.
+*   **Tools**: Snyk, OWASP Dependency Check, Trivy.
+
+#### 3. Container Image Scanning
+Scans the compiled container image (Base OS + App Layers).
+*   **Red Hat OpenShift**: Integrated scanning with Red Hat Quay (Clair).
+*   **Tools**: Trivy, Grype, Docker Scout.
+
+#### Pipeline Integration Example
+A typical secure pipeline structure:
+
+\`\`\`yaml
+stages:
+  - build
+  - test
+  - scan
+
+sast_check:
+  stage: test
+  script:
+    - semgrep --config=p/security-audit .
+
+sca_check:
+  stage: test
+  script:
+    - trivy fs --security-checks vuln,secret .
+
+container_scan:
+  stage: scan
+  script:
+    # Fail pipeline if Critical vulnerabilities are found
+    - trivy image --exit-code 1 --severity CRITICAL my-image:latest
+\`\`\`
+    `,
+    newsContext: 'Rise of AI-powered SAST tools, new regulations requiring SCA analysis (SBOM usage), and "Reachability Analysis" in modern scanners.',
+    securityTip: 'Optimization: Use **Reachability Analysis** (available in tools like Snyk or Endor Labs). It distinguishes between a vulnerable library you *installed* vs. one you actually *call* in code, reducing noise by 80%.'
   },
   {
     id: 'deployment-config',
@@ -202,7 +405,8 @@ metadata:
     pod-security.kubernetes.io/warn: baseline
 \`\`\`
     `,
-    newsContext: 'Adoption rates of PSS "Restricted" profile, common pitfalls migrating from PSP, and updates in Kubernetes 1.30 regarding admission control.'
+    newsContext: 'Adoption rates of PSS "Restricted" profile, common pitfalls migrating from PSP, and updates in Kubernetes 1.30 regarding admission control.',
+    securityTip: 'Hardening: Always set `automountServiceAccountToken: false` in your PodSpec unless the pod explicitly needs to talk to the Kubernetes API.'
   },
   {
     id: 'secrets-management',
@@ -275,7 +479,8 @@ spec:
       key: production/db/password
 \`\`\`
     `,
-    newsContext: 'Latest integrations for External Secrets Operator, new attacks targeting etcd encryption, and comparisons of Vault vs Cloud Provider Secret Managers.'
+    newsContext: 'Latest integrations for External Secrets Operator, new attacks targeting etcd encryption, and comparisons of Vault vs Cloud Provider Secret Managers.',
+    securityTip: 'Rotation: Implement **automated secret rotation** in your Vault (AWS/HashiCorp). The External Secrets Operator can automatically pick up the new value and restart the Pods.'
   },
   {
     id: 'deployment-gates',
@@ -340,7 +545,8 @@ Don't wait for the cluster to reject you. Test policies in your CI/CD pipeline u
 conftest test -p policies/ deployment.yaml
 \`\`\`
     `,
-    newsContext: 'Updates to OPA/Gatekeeper (v3+), the rise of Kyverno, and shifting validation left to the CI pipeline vs the cluster.'
+    newsContext: 'Updates to OPA/Gatekeeper (v3+), the rise of Kyverno, and shifting validation left to the CI pipeline vs the cluster.',
+    securityTip: 'Workflow: Use **chain-bench** (by Aquasec) in your pipeline to audit your software supply chain stack against CIS Software Supply Chain benchmarks.'
   },
   {
     id: 'network-policies',
@@ -370,7 +576,8 @@ spec:
 #### CNI Capabilities
 Standard \`NetworkPolicies\` are layer 3/4 (IP/Port). Advanced CNIs like **Cilium** allow Layer 7 filtering (HTTP methods, DNS names) and provide visual maps of traffic flows.
     `,
-    newsContext: 'Adoption of Cilium and eBPF for networking, sidecar-less service meshes (Istio Ambient Mesh), and Gateway API security features.'
+    newsContext: 'Adoption of Cilium and eBPF for networking, sidecar-less service meshes (Istio Ambient Mesh), and Gateway API security features.',
+    securityTip: 'Performance: Utilize **Cilium** with eBPF to enforce policies at the socket layer. This drops denied traffic before it even generates a packet, saving resources.'
   },
   {
     id: 'observability-sidecars',
@@ -397,7 +604,8 @@ kubectl debug -it my-pod --image=nicolaka/netshoot --target=app-container
 \`\`\`
 This creates a temporary container with network tools attached to the target process namespace, which vanishes when you exit.
     `,
-    newsContext: 'Rise of "Sidecar-less" service meshes (Istio Ambient), security risks of over-privileged sidecars, and advancements in OpenTelemetry security.'
+    newsContext: 'Rise of "Sidecar-less" service meshes (Istio Ambient), security risks of over-privileged sidecars, and advancements in OpenTelemetry security.',
+    securityTip: 'Trend: Sidecar-less meshes (like **Istio Ambient Mesh** or **Cilium Service Mesh**) are reducing attack surface by moving proxy logic to per-node secure agents.'
   },
   {
     id: 'multi-arch-security',
@@ -430,7 +638,8 @@ spec:
     image: python-script-executor
 \`\`\`
     `,
-    newsContext: 'Performance improvements in Kata Containers v3, new WASM (WebAssembly) security models, and Windows container isolation updates.'
+    newsContext: 'Performance improvements in Kata Containers v3, new WASM (WebAssembly) security models, and Windows container isolation updates.',
+    securityTip: 'Recommendation: For running untrusted code (e.g., customer scripts), standard namespaces are insufficient. Mandatory use of **gVisor** or **Kata Containers** is recommended.'
   },
   {
     id: 'runtime-security',
@@ -454,7 +663,8 @@ Falco monitors kernel system calls in real-time. It can alert on suspicious beha
 #### Response
 Automated response (via tools like Falco Sidekick) can immediately kill a compromised pod or cordon the node for forensics.
     `,
-    newsContext: 'New Falco rules for K8s attacks, evolution of eBPF for security observability, and Tetragon (Cilium) runtime enforcement features.'
+    newsContext: 'New Falco rules for K8s attacks, evolution of eBPF for security observability, and Tetragon (Cilium) runtime enforcement features.',
+    securityTip: 'Enforcement: **Tetragon** (by Isovalent) uses eBPF to transparently enforce runtime policies, capable of killing a process *before* a malicious syscall completes.'
   },
   {
     id: 'confidential-computing',
@@ -476,7 +686,8 @@ Hardware features like **Intel SGX**, **AMD SEV**, or **TDX** allow creating "En
 *   Running AI models on sensitive healthcare data.
 *   Key Management Systems (KMS).
     `,
-    newsContext: 'Major Cloud Providers (Azure/AWS/GCP) expanding Confidential Computing offerings (Confidential GKE), and attestation services updates.'
+    newsContext: 'Major Cloud Providers (Azure/AWS/GCP) expanding Confidential Computing offerings (Confidential GKE), and attestation services updates.',
+    securityTip: 'Adoption: Azure and GCP now offer **Confidential Nodes** for GKE/AKS. Enable this for financial or healthcare workloads to protect data in memory from host compromises.'
   },
 ];
 

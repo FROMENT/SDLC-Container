@@ -12,6 +12,7 @@ export interface ModuleItem {
   shortDesc: string;
   staticContent: string; // Core educational content (Static)
   newsContext: string;   // Context for AI to generate news (Dynamic)
+  securityTip: string;   // Specific security tip for this module
 }
 
 export interface ChatMessage {
