@@ -11,6 +11,14 @@ Focus on:
 Keep it concise, news-oriented, and actionable. Use bullet points.
 `;
 
+export const DEFAULT_GIT_CONFIG = {
+  token: '',
+  owner: '',
+  repo: '',
+  path: 'container-security-progress.json',
+  branch: 'main'
+};
+
 export const CURRICULUM: ModuleItem[] = [
   {
     id: 'base-images',

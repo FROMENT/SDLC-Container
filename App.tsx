@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { SDLCPhase, ModuleItem, NewsContentState } from './types';
-import { CURRICULUM, ICONS } from './constants';
+import { CURRICULUM, ICONS, DEFAULT_GIT_CONFIG } from './constants';
 import { generateNewsUpdate } from './services/geminiService';
+import { GitHubConfig, AppState, saveToGitHub, loadFromGitHub } from './services/githubService';
+import { secureStorage } from './services/secureStorage';
 import PipelineVisualizer from './components/PipelineVisualizer';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
 import { ChatAssistant } from './components/ChatAssistant';
@@ -9,7 +11,11 @@ import { SecurityGateIllustration } from './components/SecurityGateIllustration'
 import { CyberScanner } from './components/CyberScanner';
 import { StrideGenerator } from './components/StrideGenerator';
 import { SettingsMenu, ThemeMode, LangMode } from './components/SettingsMenu';
-import { ShieldAlert, Info, Menu, ChevronRight, Container, Radio, Sparkles, ShoppingBag, ExternalLink, Eye } from 'lucide-react';
+import { GitHubSyncModal } from './components/GitHubSyncModal';
+import { AboutPage } from './components/AboutPage';
+import { ShieldAlert, Info, Menu, ChevronRight, Container, Radio, Sparkles, ShoppingBag, ExternalLink, Eye, Cloud, Info as InfoIcon } from 'lucide-react';
+
+type ViewMode = 'app' | 'about';
 
 const App: React.FC = () => {
   // --- Persistent State Initialization Helpers ---
@@ -31,14 +37,36 @@ const App: React.FC = () => {
     return [state, setState];
   };
 
+  // --- Secure State Helper for GitHub Config ---
+  const useSecureState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
+      const [state, setState] = useState<T>(() => secureStorage.getItem(key, defaultValue));
+      useEffect(() => {
+          secureStorage.setItem(key, state);
+      }, [key, state]);
+      return [state, setState];
+  };
+
   // --- State Management ---
   const [activePhase, setActivePhase] = usePersistentState<SDLCPhase>('app_activePhase', SDLCPhase.DESIGN);
   const [activeModuleId, setActiveModuleId] = usePersistentState<string>('app_activeModuleId', CURRICULUM[0].id);
   const [viewCounts, setViewCounts] = usePersistentState<Record<string, number>>('app_viewCounts', {});
   
+  const [currentView, setCurrentView] = useState<ViewMode>('app');
+
   // Theme & Language State
   const [theme, setTheme] = usePersistentState<ThemeMode>('app_theme', 'dark');
   const [lang, setLang] = usePersistentState<LangMode>('app_lang', 'en');
+
+  // GitHub Sync State - Uses Secure Storage
+  const [gitConfig, setGitConfig] = useSecureState<GitHubConfig>('app_gitConfig', {
+    token: DEFAULT_GIT_CONFIG.token || '', 
+    owner: DEFAULT_GIT_CONFIG.owner, 
+    repo: DEFAULT_GIT_CONFIG.repo, 
+    path: DEFAULT_GIT_CONFIG.path,
+    branch: DEFAULT_GIT_CONFIG.branch
+  });
+  
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   // Separate state for news updates (Not persisted to ensure freshness)
   const [newsContent, setNewsContent] = useState<NewsContentState>({});
@@ -61,22 +89,19 @@ const App: React.FC = () => {
 
   // --- View Counter Effect ---
   useEffect(() => {
-    if (activeModuleId) {
+    if (activeModuleId && currentView === 'app') {
       setViewCounts(prev => ({
         ...prev,
         [activeModuleId]: (prev[activeModuleId] || 0) + 1
       }));
     }
-  }, [activeModuleId]); // Intentionally not including setViewCounts to avoid loops, though stable ref
+  }, [activeModuleId, currentView]); 
 
   // --- Translation Helper (UI Shell Only) ---
   const t = (key: string): string => {
     if (lang === 'en') return key;
 
-    // Check system language
     const sysLang = navigator.language.split('-')[0];
-    
-    // Simple dictionary for non-technical UI terms
     const dict: Record<string, Record<string, string>> = {
       fr: {
         'AI-Powered News': 'Actualités IA',
@@ -94,7 +119,8 @@ const App: React.FC = () => {
         'Copyright': 'Guide de Sécurité des Conteneurs.',
         'Shop Merch': 'Boutique',
         'Get the Kitten Tee': 'T-Shirt Chat Japonais',
-        'Views': 'Vues'
+        'Views': 'Vues',
+        'Sync your progress (Modules, Views, Settings) to a GitHub repository to use across devices.': 'Synchronisez votre progression (Modules, Vues, Paramètres) vers un dépôt GitHub pour l\'utiliser sur tous vos appareils.'
       },
       es: {
         'AI-Powered News': 'Noticias IA',
@@ -110,6 +136,30 @@ const App: React.FC = () => {
     return key;
   };
 
+  // --- Git Sync Handlers ---
+  const handleGitPush = async () => {
+    const appData: AppState = {
+      activePhase,
+      activeModuleId,
+      viewCounts,
+      theme,
+      lang: lang as string,
+      lastUpdated: Date.now()
+    };
+    await saveToGitHub(gitConfig, appData);
+  };
+
+  const handleGitPull = async () => {
+    const data = await loadFromGitHub(gitConfig);
+    if (data) {
+      if (data.activePhase) setActivePhase(data.activePhase as SDLCPhase);
+      if (data.activeModuleId) setActiveModuleId(data.activeModuleId);
+      if (data.viewCounts) setViewCounts(data.viewCounts);
+      if (data.theme) setTheme(data.theme as ThemeMode);
+      if (data.lang) setLang(data.lang as LangMode);
+    }
+  };
+
   // Filter modules by active phase
   const phaseModules = CURRICULUM.filter(m => m.phase === activePhase);
   const activeModule = CURRICULUM.find(m => m.id === activeModuleId);
@@ -117,9 +167,7 @@ const App: React.FC = () => {
   // Load news content when module changes
   useEffect(() => {
     const loadNews = async () => {
-      if (!activeModule) return;
-      
-      // Return if already cached
+      if (!activeModule || currentView !== 'app') return;
       if (newsContent[activeModule.id]) return;
 
       setIsNewsLoading(true);
@@ -132,12 +180,11 @@ const App: React.FC = () => {
     };
 
     loadNews();
-  }, [activeModuleId, activeModule, newsContent]);
+  }, [activeModuleId, activeModule, newsContent, currentView]);
 
   // Handle phase change
   const handlePhaseChange = (phase: SDLCPhase) => {
     setActivePhase(phase);
-    // Find first module of this phase
     const firstModule = CURRICULUM.find(m => m.phase === phase);
     if (firstModule) {
       setActiveModuleId(firstModule.id);
@@ -149,11 +196,25 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col transition-colors duration-300 bg-gray-100 text-gray-900 dark:bg-dark-bg dark:text-gray-200">
       
+      {/* Git Modal */}
+      <GitHubSyncModal 
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        config={gitConfig}
+        onSaveConfig={setGitConfig}
+        onPush={handleGitPush}
+        onPull={handleGitPull}
+        translate={t}
+      />
+
       {/* Navbar */}
       <header className="sticky top-0 z-30 transition-colors duration-300 bg-white border-b border-gray-300 dark:bg-sec-black dark:border-gray-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
+            <div 
+              className="flex items-center gap-3 cursor-pointer" 
+              onClick={() => setCurrentView('app')}
+            >
               <div className="p-1.5 rounded bg-sec-red">
                 <Container className="w-6 h-6 text-white" />
               </div>
@@ -167,7 +228,6 @@ const App: React.FC = () => {
             
             <div className="hidden md:flex items-center gap-4">
               
-              {/* Etsy Promo Link */}
               <a 
                 href="https://www.etsy.com/fr/listing/4324702523/minimalist-japanese-kitten-t-shirt-stay?ref=shop_home_active_11&logging_key=1d0299ec772988e82dfecfc5abb10b2f3dbdafca%3A4324702523"
                 target="_blank"
@@ -198,6 +258,24 @@ const App: React.FC = () => {
               
               <div className="h-6 w-px bg-gray-300 dark:bg-gray-700 mx-2"></div>
               
+              <button 
+                onClick={() => setCurrentView('about')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors border border-transparent
+                  ${currentView === 'about' ? 'bg-gray-200 dark:bg-gray-800 text-sec-red' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'}
+                `}
+                title="About"
+              >
+                <InfoIcon className="w-4 h-4" />
+              </button>
+
+              <button 
+                onClick={() => setIsSyncModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors border border-gray-200 dark:border-gray-700"
+                title="Sync to GitHub"
+              >
+                <Cloud className="w-4 h-4" />
+              </button>
+
               <SettingsMenu 
                 currentTheme={theme} 
                 onThemeChange={setTheme}
@@ -216,135 +294,141 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Pipeline Visualization */}
-      <PipelineVisualizer 
-        currentPhase={activePhase} 
-        onSelectPhase={handlePhaseChange}
-        translate={t}
-      />
+      {currentView === 'about' ? (
+        <AboutPage onBack={() => setCurrentView('app')} translate={t} />
+      ) : (
+        <>
+          {/* Pipeline Visualization */}
+          <PipelineVisualizer 
+            currentPhase={activePhase} 
+            onSelectPhase={handlePhaseChange}
+            translate={t}
+          />
 
-      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col md:flex-row gap-8">
-        
-        {/* Sidebar / Module List */}
-        <aside className={`
-            md:w-64 flex-shrink-0 
-            ${mobileMenuOpen ? 'block' : 'hidden'} md:block
-          `}>
-          <div className="sticky top-24">
-            <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-500">
-              {activePhase} {t('Modules')}
-            </h3>
-            <div className="space-y-2">
-              {phaseModules.map(module => (
-                <button
-                  key={module.id}
-                  onClick={() => {
-                    setActiveModuleId(module.id);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`
-                    w-full text-left px-4 py-3 rounded-lg transition-all duration-200 flex items-center justify-between group
-                    ${activeModuleId === module.id 
-                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-l-4 border-sec-red shadow-md dark:shadow-none ring-1 ring-gray-200 dark:ring-0' 
-                      : 'hover:bg-gray-200 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}
-                  `}
-                >
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">{module.title}</span>
-                    <span className="text-[10px] text-gray-400 flex items-center gap-1 mt-1">
-                      <Eye className="w-3 h-3" /> {viewCounts[module.id] || 0}
-                    </span>
-                  </div>
-                  {activeModuleId === module.id && <ChevronRight className="w-4 h-4 text-sec-red" />}
-                </button>
-              ))}
-            </div>
+          <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col md:flex-row gap-8">
+            
+            {/* Sidebar / Module List */}
+            <aside className={`
+                md:w-64 flex-shrink-0 
+                ${mobileMenuOpen ? 'block' : 'hidden'} md:block
+              `}>
+              <div className="sticky top-24">
+                <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-500">
+                  {activePhase} {t('Modules')}
+                </h3>
+                <div className="space-y-2">
+                  {phaseModules.map(module => (
+                    <button
+                      key={module.id}
+                      onClick={() => {
+                        setActiveModuleId(module.id);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`
+                        w-full text-left px-4 py-3 rounded-lg transition-all duration-200 flex items-center justify-between group
+                        ${activeModuleId === module.id 
+                          ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-l-4 border-sec-red shadow-md dark:shadow-none ring-1 ring-gray-200 dark:ring-0' 
+                          : 'hover:bg-gray-200 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}
+                      `}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{module.title}</span>
+                        <span className="text-[10px] text-gray-400 flex items-center gap-1 mt-1">
+                          <Eye className="w-3 h-3" /> {viewCounts[module.id] || 0}
+                        </span>
+                      </div>
+                      {activeModuleId === module.id && <ChevronRight className="w-4 h-4 text-sec-red" />}
+                    </button>
+                  ))}
+                </div>
 
-            {/* Futuristic Scanner Widget */}
-            <CyberScanner phase={activePhase} translate={t} />
+                {/* Futuristic Scanner Widget */}
+                <CyberScanner phase={activePhase} translate={t} />
 
-          </div>
-        </aside>
+              </div>
+            </aside>
 
-        {/* Main Content Area */}
-        <main className="flex-1 min-w-0 flex flex-col gap-8">
-           
-           {/* Static Content Section */}
-           {activeModule && (
-             <div className="p-6 transition-all duration-300 shadow-lg rounded-2xl md:p-8 animate-fade-in bg-white border border-gray-300 dark:bg-card-bg dark:border-gray-800">
-               <div className="flex items-center justify-between mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
-                 <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-lg bg-gray-100 dark:bg-gray-900">
-                      <ActiveIcon className="w-8 h-8 text-sec-red" />
-                    </div>
-                    <div>
-                      <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-                        {activeModule.title}
-                      </h2>
-                      <p className="mt-1 text-gray-700 dark:text-gray-400 font-medium">
-                        {activeModule.shortDesc}
-                      </p>
-                    </div>
-                 </div>
-                 
-                 {/* Counter Display */}
-                 <div className="hidden sm:flex flex-col items-end text-gray-400">
-                    <span className="text-xs uppercase tracking-wider">{t('Views')}</span>
-                    <span className="text-2xl font-mono font-bold text-sec-red">{viewCounts[activeModule.id] || 1}</span>
-                 </div>
-               </div>
-               
-               {/* Dynamic Security Tip */}
-               <div className="flex flex-col items-start gap-4 p-4 mb-8 border rounded-xl md:flex-row bg-yellow-50 border-yellow-300 dark:bg-yellow-900/10 dark:border-yellow-800/50">
-                  <div className="flex-shrink-0 p-2 rounded-lg bg-yellow-100 dark:bg-yellow-500/10">
-                    <ShieldAlert className="w-6 h-6 text-yellow-700 dark:text-yellow-500" />
-                  </div>
-                  <div>
-                    <h4 className="mb-1 text-sm font-bold uppercase tracking-wider text-yellow-800 dark:text-yellow-500">
-                      {t('Security Pro Tip')}
-                    </h4>
-                    <div className="text-sm leading-relaxed text-gray-900 dark:text-gray-300 font-medium">
-                       <MarkdownRenderer content={activeModule.securityTip} />
-                    </div>
-                  </div>
-               </div>
-
-               {/* Interactive Illustrations */}
-               {activeModuleId === 'deployment-gates' && <SecurityGateIllustration />}
-               {activeModuleId === 'threat-modeling' && <StrideGenerator />}
-
-               {/* Render Static Markdown */}
-               <div className="prose max-w-none prose-gray dark:prose-invert text-gray-900 dark:text-gray-300">
-                 <MarkdownRenderer content={activeModule.staticContent} />
-               </div>
-             </div>
-           )}
-
-           {/* Dynamic News Section */}
-           <div className="relative p-6 overflow-hidden border shadow-lg rounded-2xl md:p-8 bg-white border-gray-300 dark:bg-card-bg dark:border-gray-800 transition-colors duration-300">
-              <div className="absolute top-0 left-0 w-1 h-full bg-blue-600 dark:bg-blue-500"></div>
+            {/* Main Content Area */}
+            <main className="flex-1 min-w-0 flex flex-col gap-8">
               
-              <div className="flex items-center gap-3 mb-6">
-                 <Radio className={`w-5 h-5 text-blue-700 dark:text-blue-400 ${isNewsLoading ? 'animate-pulse' : ''}`} />
-                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('Live Security Intelligence')}</h3>
-                 {isNewsLoading && <span className="text-xs animate-pulse text-blue-700 dark:text-blue-400/70">{t('Fetching latest updates...')}</span>}
+              {/* Static Content Section */}
+              {activeModule && (
+                <div className="p-6 transition-all duration-300 shadow-lg rounded-2xl md:p-8 animate-fade-in bg-white border border-gray-300 dark:bg-card-bg dark:border-gray-800">
+                  <div className="flex items-center justify-between mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-lg bg-gray-100 dark:bg-gray-900">
+                          <ActiveIcon className="w-8 h-8 text-sec-red" />
+                        </div>
+                        <div>
+                          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+                            {activeModule.title}
+                          </h2>
+                          <p className="mt-1 text-gray-700 dark:text-gray-400 font-medium">
+                            {activeModule.shortDesc}
+                          </p>
+                        </div>
+                    </div>
+                    
+                    {/* Counter Display */}
+                    <div className="hidden sm:flex flex-col items-end text-gray-400">
+                        <span className="text-xs uppercase tracking-wider">{t('Views')}</span>
+                        <span className="text-2xl font-mono font-bold text-sec-red">{viewCounts[activeModule.id] || 1}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Dynamic Security Tip */}
+                  <div className="flex flex-col items-start gap-4 p-4 mb-8 border rounded-xl md:flex-row bg-yellow-50 border-yellow-300 dark:bg-yellow-900/10 dark:border-yellow-800/50">
+                      <div className="flex-shrink-0 p-2 rounded-lg bg-yellow-100 dark:bg-yellow-500/10">
+                        <ShieldAlert className="w-6 h-6 text-yellow-700 dark:text-yellow-500" />
+                      </div>
+                      <div>
+                        <h4 className="mb-1 text-sm font-bold uppercase tracking-wider text-yellow-800 dark:text-yellow-500">
+                          {t('Security Pro Tip')}
+                        </h4>
+                        <div className="text-sm leading-relaxed text-gray-900 dark:text-gray-300 font-medium">
+                          <MarkdownRenderer content={activeModule.securityTip} />
+                        </div>
+                      </div>
+                  </div>
+
+                  {/* Interactive Illustrations */}
+                  {activeModuleId === 'deployment-gates' && <SecurityGateIllustration />}
+                  {activeModuleId === 'threat-modeling' && <StrideGenerator />}
+
+                  {/* Render Static Markdown */}
+                  <div className="prose max-w-none prose-gray dark:prose-invert text-gray-900 dark:text-gray-300">
+                    <MarkdownRenderer content={activeModule.staticContent} />
+                  </div>
+                </div>
+              )}
+
+              {/* Dynamic News Section */}
+              <div className="relative p-6 overflow-hidden border shadow-lg rounded-2xl md:p-8 bg-white border-gray-300 dark:bg-card-bg dark:border-gray-800 transition-colors duration-300">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-blue-600 dark:bg-blue-500"></div>
+                  
+                  <div className="flex items-center gap-3 mb-6">
+                    <Radio className={`w-5 h-5 text-blue-700 dark:text-blue-400 ${isNewsLoading ? 'animate-pulse' : ''}`} />
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('Live Security Intelligence')}</h3>
+                    {isNewsLoading && <span className="text-xs animate-pulse text-blue-700 dark:text-blue-400/70">{t('Fetching latest updates...')}</span>}
+                  </div>
+
+                  {isNewsLoading ? (
+                    <div className="space-y-3 animate-pulse">
+                      <div className="w-3/4 h-4 rounded bg-gray-200 dark:bg-gray-800"></div>
+                      <div className="w-1/2 h-4 rounded bg-gray-200 dark:bg-gray-800"></div>
+                      <div className="w-5/6 h-4 rounded bg-gray-200 dark:bg-gray-800"></div>
+                    </div>
+                  ) : (
+                    <div className="prose prose-sm max-w-none prose-gray dark:prose-invert text-gray-900 dark:text-gray-300">
+                        <MarkdownRenderer content={newsContent[activeModuleId] || t('No updates available.')} />
+                    </div>
+                  )}
               </div>
 
-              {isNewsLoading ? (
-                 <div className="space-y-3 animate-pulse">
-                   <div className="w-3/4 h-4 rounded bg-gray-200 dark:bg-gray-800"></div>
-                   <div className="w-1/2 h-4 rounded bg-gray-200 dark:bg-gray-800"></div>
-                   <div className="w-5/6 h-4 rounded bg-gray-200 dark:bg-gray-800"></div>
-                 </div>
-              ) : (
-                 <div className="prose prose-sm max-w-none prose-gray dark:prose-invert text-gray-900 dark:text-gray-300">
-                    <MarkdownRenderer content={newsContent[activeModuleId] || t('No updates available.')} />
-                 </div>
-              )}
-           </div>
-
-        </main>
-      </div>
+            </main>
+          </div>
+        </>
+      )}
 
       <ChatAssistant />
       
