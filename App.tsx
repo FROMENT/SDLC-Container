@@ -49,7 +49,9 @@ const App: React.FC = () => {
   // --- State Management ---
   const [activePhase, setActivePhase] = usePersistentState<SDLCPhase>('app_activePhase', SDLCPhase.DESIGN);
   const [activeModuleId, setActiveModuleId] = usePersistentState<string>('app_activeModuleId', CURRICULUM[0].id);
-  const [viewCounts, setViewCounts] = usePersistentState<Record<string, number>>('app_viewCounts', {});
+  
+  // View Counts is now managed via API, not local persistence (though state is kept for UI)
+  const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
   
   const [currentView, setCurrentView] = useState<ViewMode>('app');
 
@@ -87,13 +89,36 @@ const App: React.FC = () => {
     }
   }, [theme]);
 
-  // --- View Counter Effect ---
+  // --- View Counter Effect (Public API) ---
   useEffect(() => {
     if (activeModuleId && currentView === 'app') {
-      setViewCounts(prev => ({
-        ...prev,
-        [activeModuleId]: (prev[activeModuleId] || 0) + 1
-      }));
+      const fetchViewCount = async () => {
+        try {
+          // Namespace: Unique to this application demo
+          const NAMESPACE = 'container-security-sdlc-demo-v1';
+          const KEY = activeModuleId;
+          
+          // Call the public counter API (increments the count)
+          const response = await fetch(`https://api.counterapi.dev/v1/${NAMESPACE}/${KEY}/up`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            // Offset Logic: Start visually at 10
+            // If API returns 1, we show 11.
+            const offsetCount = (data.count || 0) + 10;
+            
+            setViewCounts(prev => ({
+              ...prev,
+              [activeModuleId]: offsetCount
+            }));
+          }
+        } catch (error) {
+          console.warn('Could not fetch view count from external API', error);
+          // Fallback: Just increment local state conceptually or leave as is
+        }
+      };
+
+      fetchViewCount();
     }
   }, [activeModuleId, currentView]); 
 
@@ -334,7 +359,7 @@ const App: React.FC = () => {
                       <div className="flex flex-col">
                         <span className="text-sm font-medium">{module.title}</span>
                         <span className="text-[10px] text-gray-400 flex items-center gap-1 mt-1">
-                          <Eye className="w-3 h-3" /> {viewCounts[module.id] || 0}
+                          <Eye className="w-3 h-3" /> {viewCounts[module.id] || 10}
                         </span>
                       </div>
                       {activeModuleId === module.id && <ChevronRight className="w-4 h-4 text-sec-red" />}
@@ -372,7 +397,7 @@ const App: React.FC = () => {
                     {/* Counter Display */}
                     <div className="hidden sm:flex flex-col items-end text-gray-400">
                         <span className="text-xs uppercase tracking-wider">{t('Views')}</span>
-                        <span className="text-2xl font-mono font-bold text-sec-red">{viewCounts[activeModule.id] || 1}</span>
+                        <span className="text-2xl font-mono font-bold text-sec-red">{viewCounts[activeModule.id] || 10}</span>
                     </div>
                   </div>
                   
