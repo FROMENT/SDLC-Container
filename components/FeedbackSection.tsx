@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, Review } from '../services/supabaseClient';
-import { Star, Send, User, MessageSquare, Loader2 } from 'lucide-react';
+import { Star, Send, User, MessageSquare, Loader2, AlertCircle } from 'lucide-react';
 
 export const FeedbackSection: React.FC = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
   
   // Form State
   const [name, setName] = useState('');
@@ -26,10 +27,18 @@ export const FeedbackSection: React.FC = () => {
         .order('created_at', { ascending: false })
         .limit(10);
 
-      if (error) throw error;
-      if (data) setReviews(data);
-    } catch (err) {
-      console.warn("Could not fetch reviews. Check if table 'reviews' exists in Supabase.", err);
+      if (error) {
+        throw error;
+      }
+      
+      if (data) {
+        setReviews(data);
+        setConnectionError(false);
+      }
+    } catch (err: any) {
+      console.warn("Supabase Error:", err.message);
+      // If table doesn't exist (404) or connection fails
+      setConnectionError(true);
     } finally {
       setLoading(false);
     }
@@ -57,7 +66,7 @@ export const FeedbackSection: React.FC = () => {
       setRating(5);
       await fetchReviews();
     } catch (err: any) {
-      setError('Failed to submit review. ' + (err.message || ''));
+      setError('Failed to submit review. ' + (err.message || 'Check network'));
     } finally {
       setSubmitting(false);
     }
@@ -128,6 +137,12 @@ export const FeedbackSection: React.FC = () => {
         <div className="space-y-4 max-h-[500px] overflow-y-auto">
           {loading ? (
              <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-gray-400" /></div>
+          ) : connectionError ? (
+             <div className="flex flex-col items-center justify-center p-8 text-center bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
+                <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
+                <p className="text-sm text-red-600 dark:text-red-400">Unable to load reviews.</p>
+                <p className="text-xs text-gray-500 mt-1">Check if 'reviews' table exists in Supabase.</p>
+             </div>
           ) : reviews.length === 0 ? (
              <div className="text-center p-8 text-gray-500 italic">No reviews yet. Be the first!</div>
           ) : (
