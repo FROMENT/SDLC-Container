@@ -350,33 +350,52 @@ Detecting vulnerabilities during the Build phase is significantly cheaper and sa
 
 #### 3. Container Image Scanning
 Scans the compiled container image (Base OS + App Layers).
-*   **Red Hat OpenShift**: Integrated scanning with Red Hat Quay (Clair).
-*   **Tools**: Trivy, Grype, Docker Scout.
 
-#### Pipeline Integration Example
-A typical secure pipeline structure:
+#### Real-World CI/CD Integration
+
+**Scenario A: GitHub Actions with Trivy**
+This workflow builds an image and fails the pipeline if **CRITICAL** vulnerabilities are found.
 
 \`\`\`yaml
-stages:
-  - build
-  - test
-  - scan
+name: Build and Scan
+on: [push]
+jobs:
+  build-secure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Build Docker Image
+        run: docker build -t myapp:\${{ github.sha }} .
 
-sast_check:
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'myapp:\${{ github.sha }}'
+          format: 'table'
+          # FAIL the build on Critical issues
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+\`\`\`
+
+**Scenario B: GitLab CI with Grype**
+Using Anchore Grype to scan an image within a GitLab pipeline.
+
+\`\`\`yaml
+security_scan:
   stage: test
+  image: docker:stable
+  services:
+    - docker:dind
+  before_script:
+    # Install Grype
+    - apk add curl
+    - curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
   script:
-    - semgrep --config=p/security-audit .
-
-sca_check:
-  stage: test
-  script:
-    - trivy fs --security-checks vuln,secret .
-
-container_scan:
-  stage: scan
-  script:
-    # Fail pipeline if Critical vulnerabilities are found
-    - trivy image --exit-code 1 --severity CRITICAL my-image:latest
+    - docker build -t myapp:$CI_COMMIT_SHA .
+    # Scan and FAIL on Critical severity
+    - grype myapp:$CI_COMMIT_SHA --fail-on critical
 \`\`\`
     `,
     newsContext: 'Rise of AI-powered SAST tools, new regulations requiring SCA analysis (SBOM usage), and "Reachability Analysis" in modern scanners.',
