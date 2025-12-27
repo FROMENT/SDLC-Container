@@ -17,9 +17,9 @@ export const ChatAssistant: React.FC<Props> = ({ lang = 'en' }) => {
     : 'Hello! Ask me anything about Kubernetes or Container Security.';
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  // Only set initial message once or when lang changes and list is empty? 
-  // Better to just init with the localized string on mount or lang change if empty.
+  
   useEffect(() => {
+     // If the language changes, we reset the greeting if it's the only message or if empty
      if (messages.length === 0) {
         setMessages([{ role: 'model', text: initialGreeting, timestamp: Date.now() }]);
      }
