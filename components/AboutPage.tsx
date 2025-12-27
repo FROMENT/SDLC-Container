@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, Shield, Workflow, AlertOctagon, Lightbulb, GitMerge, Fingerprint } from 'lucide-react';
+import { Terminal, Shield, Workflow, AlertOctagon, Lightbulb, Fingerprint } from 'lucide-react';
 import { FeedbackSection } from './FeedbackSection';
 
 interface Props {
@@ -45,10 +45,6 @@ export const AboutPage: React.FC<Props> = ({ onBack, translate }) => {
               <li className="flex items-start gap-2 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg">
                 <Lightbulb className="w-5 h-5 text-sec-red mt-0.5" />
                 <span><strong>AI Integration:</strong> Uses Google Gemini for real-time security news and threat analysis.</span>
-              </li>
-              <li className="flex items-start gap-2 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg">
-                <GitMerge className="w-5 h-5 text-sec-red mt-0.5" />
-                <span><strong>Persistence:</strong> Syncs your learning progress via GitHub API.</span>
               </li>
             </ul>
           </div>

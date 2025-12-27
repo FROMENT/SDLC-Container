@@ -9,6 +9,7 @@ import { MarkdownRenderer } from './components/MarkdownRenderer';
 import { ChatAssistant } from './components/ChatAssistant';
 import { SecurityGateIllustration } from './components/SecurityGateIllustration';
 import { NetworkPolicyIllustration } from './components/NetworkPolicyIllustration';
+import { PolicyWizard } from './components/PolicyWizard';
 import { CyberScanner } from './components/CyberScanner';
 import { StrideGenerator } from './components/StrideGenerator';
 import { SettingsMenu, ThemeMode, LangMode } from './components/SettingsMenu';
@@ -525,7 +526,12 @@ const App: React.FC = () => {
                   </div>
 
                   {/* Interactive Illustrations */}
-                  {activeModuleId === 'deployment-gates' && <SecurityGateIllustration />}
+                  {activeModuleId === 'deployment-gates' && (
+                    <>
+                      <SecurityGateIllustration />
+                      <PolicyWizard />
+                    </>
+                  )}
                   {activeModuleId === 'threat-modeling' && <StrideGenerator />}
                   {activeModuleId === 'network-policies' && <NetworkPolicyIllustration translate={t} />}
 
