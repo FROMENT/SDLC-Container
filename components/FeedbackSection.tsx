@@ -2,11 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { supabase, Review } from '../services/supabaseClient';
 import { Star, Send, User, MessageSquare, Loader2, AlertCircle } from 'lucide-react';
 
-export const FeedbackSection: React.FC = () => {
+interface Props {
+  translate?: (key: string) => string;
+}
+
+export const FeedbackSection: React.FC<Props> = ({ translate }) => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
+  const t = translate || ((k: string) => k);
   
   // Form State
   const [name, setName] = useState('');
@@ -47,7 +52,7 @@ export const FeedbackSection: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !comment.trim()) {
-      setError('Please fill in all fields.');
+      setError(t('Please fill in all fields.'));
       return;
     }
     setError('');
@@ -66,7 +71,7 @@ export const FeedbackSection: React.FC = () => {
       setRating(5);
       await fetchReviews();
     } catch (err: any) {
-      setError('Failed to submit review. ' + (err.message || 'Check network'));
+      setError(t('Failed to submit review.') + ' ' + (err.message || 'Check network'));
     } finally {
       setSubmitting(false);
     }
@@ -76,16 +81,16 @@ export const FeedbackSection: React.FC = () => {
     <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-800">
       <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
         <MessageSquare className="w-6 h-6 text-sec-red" />
-        Community Feedback
+        {t('Community Feedback')}
       </h3>
 
       <div className="grid md:grid-cols-2 gap-8">
         {/* Form */}
         <div className="bg-white dark:bg-card-bg p-6 rounded-xl border border-gray-300 dark:border-gray-700 shadow-sm">
-          <h4 className="text-lg font-semibold mb-4 dark:text-gray-200">Leave a Review</h4>
+          <h4 className="text-lg font-semibold mb-4 dark:text-gray-200">{t('Leave a Review')}</h4>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Name</label>
+              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">{t('Name')}</label>
               <input 
                 type="text" 
                 value={name}
@@ -95,7 +100,7 @@ export const FeedbackSection: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Rating</label>
+              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">{t('Rating')}</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
@@ -110,7 +115,7 @@ export const FeedbackSection: React.FC = () => {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Comment</label>
+              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">{t('Comment')}</label>
               <textarea 
                 value={comment}
                 onChange={e => setComment(e.target.value)}
@@ -128,7 +133,7 @@ export const FeedbackSection: React.FC = () => {
               className="w-full bg-sec-red hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition disabled:opacity-50"
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              Submit Review
+              {t('Submit Review')}
             </button>
           </form>
         </div>
@@ -140,11 +145,11 @@ export const FeedbackSection: React.FC = () => {
           ) : connectionError ? (
              <div className="flex flex-col items-center justify-center p-8 text-center bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
                 <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
-                <p className="text-sm text-red-600 dark:text-red-400">Unable to load reviews.</p>
-                <p className="text-xs text-gray-500 mt-1">Check if 'reviews' table exists in Supabase.</p>
+                <p className="text-sm text-red-600 dark:text-red-400">{t('Unable to load reviews.')}</p>
+                <p className="text-xs text-gray-500 mt-1">{t("Check if 'reviews' table exists in Supabase.")}</p>
              </div>
           ) : reviews.length === 0 ? (
-             <div className="text-center p-8 text-gray-500 italic">No reviews yet. Be the first!</div>
+             <div className="text-center p-8 text-gray-500 italic">{t('No reviews yet. Be the first!')}</div>
           ) : (
             reviews.map((rev, idx) => (
               <div key={rev.id || idx} className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700/50 animate-fade-in">

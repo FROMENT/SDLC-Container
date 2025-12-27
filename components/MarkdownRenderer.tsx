@@ -5,7 +5,7 @@ interface Props {
 }
 
 // A lightweight markdown renderer.
-// Handles headers, code blocks, bold/code inline, lists, and tables.
+// Handles headers (H1-H4), code blocks, bold/code inline, lists, and tables.
 export const MarkdownRenderer: React.FC<Props> = ({ content }) => {
   if (!content) return null;
 
@@ -70,7 +70,8 @@ export const MarkdownRenderer: React.FC<Props> = ({ content }) => {
     }
 
     // Lists
-    if (trimmedLine.startsWith('- ')) {
+    if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+       // Support both - and * for lists
        const text = trimmedLine.substring(2);
        listBuffer.push(<li key={`li-${index}`}>{parseInline(text)}</li>);
        return;
@@ -79,12 +80,30 @@ export const MarkdownRenderer: React.FC<Props> = ({ content }) => {
     }
 
     // Headers
-    if (line.startsWith('### ')) {
-      elements.push(<h3 key={index} className="text-xl font-bold text-gray-900 dark:text-white mt-6 mb-3">{line.replace('### ', '')}</h3>);
+    if (line.startsWith('#### ')) {
+      elements.push(
+        <h4 key={index} className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-6 mb-2 flex items-center gap-2">
+          {parseInline(line.replace('#### ', ''))}
+        </h4>
+      );
+    } else if (line.startsWith('### ')) {
+      elements.push(
+        <h3 key={index} className="text-xl font-bold text-gray-900 dark:text-white mt-6 mb-3">
+          {parseInline(line.replace('### ', ''))}
+        </h3>
+      );
     } else if (line.startsWith('## ')) {
-      elements.push(<h2 key={index} className="text-2xl font-bold text-sec-red mt-8 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">{line.replace('## ', '')}</h2>);
+      elements.push(
+        <h2 key={index} className="text-2xl font-bold text-sec-red mt-8 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
+          {parseInline(line.replace('## ', ''))}
+        </h2>
+      );
     } else if (line.startsWith('# ')) {
-      elements.push(<h1 key={index} className="text-3xl font-bold text-gray-900 dark:text-white mt-4 mb-6">{line.replace('# ', '')}</h1>);
+      elements.push(
+        <h1 key={index} className="text-3xl font-bold text-gray-900 dark:text-white mt-4 mb-6">
+          {parseInline(line.replace('# ', ''))}
+        </h1>
+      );
     } 
     // Empty lines
     else if (trimmedLine === '') {
@@ -102,7 +121,11 @@ export const MarkdownRenderer: React.FC<Props> = ({ content }) => {
 
 // Helper for bold/italic/code inline
 const parseInline = (text: string): React.ReactNode => {
+  if (!text) return null;
+  // Regex to split by code blocks `...` and bold **...**
+  // Note: Simple parser, doesn't handle nested or escaped well, but sufficient for this content.
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+  
   return parts.map((part, i) => {
     if (part.startsWith('`') && part.endsWith('`')) {
       return <code key={i} className="bg-gray-200 dark:bg-gray-800 text-pink-800 dark:text-yellow-300 px-1 py-0.5 rounded text-sm font-mono border border-gray-300 dark:border-gray-700">{part.slice(1, -1)}</code>;

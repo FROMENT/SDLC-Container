@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SDLCPhase, ModuleItem, NewsContentState } from './types';
-import { CURRICULUM, ICONS, DEFAULT_GIT_CONFIG } from './constants';
+import { getCurriculum, ICONS, DEFAULT_GIT_CONFIG } from './constants';
 import { generateNewsUpdate } from './services/geminiService';
 import { GitHubConfig, AppState, saveToGitHub, loadFromGitHub } from './services/githubService';
 import { secureStorage } from './services/secureStorage';
@@ -8,6 +8,7 @@ import PipelineVisualizer from './components/PipelineVisualizer';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
 import { ChatAssistant } from './components/ChatAssistant';
 import { SecurityGateIllustration } from './components/SecurityGateIllustration';
+import { NetworkPolicyIllustration } from './components/NetworkPolicyIllustration';
 import { CyberScanner } from './components/CyberScanner';
 import { StrideGenerator } from './components/StrideGenerator';
 import { SettingsMenu, ThemeMode, LangMode } from './components/SettingsMenu';
@@ -48,7 +49,9 @@ const App: React.FC = () => {
 
   // --- State Management ---
   const [activePhase, setActivePhase] = usePersistentState<SDLCPhase>('app_activePhase', SDLCPhase.DESIGN);
-  const [activeModuleId, setActiveModuleId] = usePersistentState<string>('app_activeModuleId', CURRICULUM[0].id);
+  // We store ID, not the object, so we can switch langs easily
+  // Note: CURRICULUM ids must be identical in both langs
+  const [activeModuleId, setActiveModuleId] = usePersistentState<string>('app_activeModuleId', 'base-images');
   
   // View Counts is now managed via API, not local persistence (though state is kept for UI)
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
@@ -58,6 +61,14 @@ const App: React.FC = () => {
   // Theme & Language State
   const [theme, setTheme] = usePersistentState<ThemeMode>('app_theme', 'dark');
   const [lang, setLang] = usePersistentState<LangMode>('app_lang', 'en');
+
+  // Resolve actual language string (en or fr)
+  const currentLangCode = lang === 'system' 
+    ? (navigator.language.startsWith('fr') ? 'fr' : 'en') 
+    : lang;
+
+  // Get localized curriculum
+  const CURRICULUM = getCurriculum(currentLangCode);
 
   // GitHub Sync State - Uses Secure Storage
   const [gitConfig, setGitConfig] = useSecureState<GitHubConfig>('app_gitConfig', {
@@ -124,41 +135,134 @@ const App: React.FC = () => {
 
   // --- Translation Helper (UI Shell Only) ---
   const t = (key: string): string => {
-    if (lang === 'en') return key;
+    if (currentLangCode === 'en') return key;
 
-    const sysLang = navigator.language.split('-')[0];
-    const dict: Record<string, Record<string, string>> = {
-      fr: {
-        'AI-Powered News': 'Actualités IA',
-        'Live Security Intelligence': 'Veille Sécurité en Temps Réel',
-        'Fetching latest updates...': 'Recherche des mises à jour...',
-        'No updates available.': 'Aucune mise à jour disponible.',
-        'DevSecOps & K8s Best Practices': 'Bonnes Pratiques DevSecOps & K8s',
-        'Security Pro Tip': 'Conseil de Sécurité',
-        'Modules': 'Modules',
-        'Secure Container Lifecycle': 'Cycle de vie des conteneurs',
-        'Design': 'Conception',
-        'Build': 'Construction',
-        'Deploy': 'Déploiement',
-        'Run': 'Exécution',
-        'Copyright': 'Guide de Sécurité des Conteneurs.',
-        'Shop Merch': 'Boutique',
-        'Get the Kitten Tee': 'T-Shirt Chat Japonais',
-        'Views': 'Vues',
-        'Sync your progress (Modules, Views, Settings) to a GitHub repository to use across devices.': 'Synchronisez votre progression (Modules, Vues, Paramètres) vers un dépôt GitHub pour l\'utiliser sur tous vos appareils.'
-      },
-      es: {
-        'AI-Powered News': 'Noticias IA',
-        'Modules': 'Módulos',
-        'Security Pro Tip': 'Consejo de Seguridad',
-        'Views': 'Vistas'
-      }
+    const dict: Record<string, string> = {
+      // General
+      'AI-Powered News': 'Actualités IA',
+      'Live Security Intelligence': 'Veille Sécurité en Temps Réel',
+      'Fetching latest updates...': 'Recherche des mises à jour...',
+      'No updates available.': 'Aucune mise à jour disponible.',
+      'DevSecOps & K8s Best Practices': 'Bonnes Pratiques DevSecOps & K8s',
+      'Security Pro Tip': 'Conseil de Sécurité',
+      'Modules': 'Modules',
+      'Views': 'Vues',
+      'Copyright': 'Guide de Sécurité des Conteneurs.',
+      
+      // Phases
+      'Secure Container Lifecycle': 'Cycle de vie des conteneurs',
+      'Design': 'Conception',
+      'Build': 'Build', // "Build" is common in FR tech
+      'Deploy': 'Déploiement',
+      'Run': 'Runtime', // "Runtime" is common in FR tech
+      
+      // Phase Enum (Manual mapping because enum keys are English)
+      'Design & Base Images': 'Design & Images de Base',
+      'Build & Registry': 'Build & Registre',
+      'Deployment & Config': 'Déploiement & Config',
+      'Runtime & Monitoring': 'Runtime & Monitoring',
+
+      // Merch
+      'Shop Merch': 'Boutique',
+      'Get the Kitten Tee': 'T-Shirt Chat Japonais',
+
+      // About Page
+      'About Container Security Guide': 'À propos du Guide de Sécurité',
+      'Executive Summary': 'Résumé Exécutif',
+      'Stop Saying "Passer la Sécurité"': 'Arrêtez de dire "Passer la Sécurité"',
+      'Analysis & Improvement Roadmap': 'Analyse & Roadmap',
+      'Current Gaps': 'Lacunes Actuelles',
+      'Incoming Improvements (Secure by Design)': 'Améliorations à Venir (Secure by Design)',
+      'Back to Dashboard': 'Retour au Tableau de Bord',
+      'An interactive platform designed to bridge the gap between DevOps agility and Security rigor.': 'Une plateforme interactive conçue pour combler le fossé entre l\'agilité DevOps et la rigueur de la Sécurité.',
+      'This application serves as a comprehensive "Secure Software Development Life Cycle" (SSDLC) guide tailored for': 'Cette application sert de guide complet "Secure Software Development Life Cycle" (SSDLC) adapté pour',
+      'and Kubernetes environments. It provides actionable guidance to harden your supply chain from the first line of code to runtime execution.': 'et les environnements Kubernetes. Elle fournit des conseils exploitables pour durcir votre supply chain de la première ligne de code à l\'exécution runtime.',
+      'Holistic Approach:': 'Approche Holistique :',
+      'Covers Design, Build, Deploy, and Runtime phases.': 'Couvre les phases de Design, Build, Déploiement et Runtime.',
+      'East-West Protection:': 'Protection Est-Ouest :',
+      'Dedicated focus on OpenShift Network Policies and microsegmentation.': 'Focus dédié sur les Network Policies OpenShift et la microsegmentation.',
+      'AI Integration:': 'Intégration IA :',
+      'Uses Google Gemini for real-time security news and threat analysis.': 'Utilise Google Gemini pour les actualités de sécurité en temps réel et l\'analyse de menaces.',
+      'Persistence:': 'Persistance :',
+      'Syncs your learning progress via GitHub API.': 'Synchronise votre progression via l\'API GitHub.',
+      'I am constantly surprised that in': 'Je suis constamment surpris qu\'en',
+      ', we still hear the phrase': ', nous entendons encore la phrase',
+      '(We need to pass security).': '(Il faut qu\'on passe la sécurité).',
+      'Security is not a checkpoint, a toll booth, or a "gate" you trick to get your code into production.': 'La sécurité n\'est pas un point de contrôle, un péage ou une "porte" que vous trompez pour mettre votre code en production.',
+      'It is a quality attribute of your software, just like performance or reliability.': 'C\'est un attribut de qualité de votre logiciel, tout comme la performance ou la fiabilité.',
+      'When you say "pass security," you imply it\'s an obstacle. This mindset leads to vulnerabilities. You don\'t "pass" stability; you build stable software.': 'Quand vous dites "passer la sécurité", vous impliquez que c\'est un obstacle. Cet état d\'esprit mène aux vulnérabilités. Vous ne "passez" pas la stabilité; vous construisez des logiciels stables.',
+      'We must build': 'Nous devons construire des logiciels',
+      'software.': '.',
+      'Static Policy Generation:': 'Génération de Politique Statique :',
+      'Users learn about OPA/Kyverno but have to write YAML manually.': 'Les utilisateurs apprennent OPA/Kyverno mais doivent écrire le YAML manuellement.',
+      'Limited Hands-on Labs:': 'Labs Pratiques Limités :',
+      'The app explains concepts but lacks an embedded terminal for actual `kubectl` commands.': 'L\'app explique les concepts mais manque d\'un terminal intégré pour les vraies commandes `kubectl`.',
+      'Supply Chain Visualization:': 'Visualisation Supply Chain :',
+      'We mention SBOMs, but we don\'t visualize the dependency graph.': 'Nous mentionnons les SBOMs, mais nous ne visualisons pas le graphe de dépendance.',
+      'Policy-as-Code Wizard': 'Assistant Policy-as-Code',
+      'A visual generator that creates `ClusterPolicy` (Kyverno) or Rego (OPA) rules based on user-selected checkboxes (e.g., "Disallow Root", "Require Probes").': 'Un générateur visuel qui crée des règles `ClusterPolicy` (Kyverno) ou Rego (OPA) basées sur des cases à cocher (ex: "Interdire Root", "Exiger Probes").',
+      'Automated Dependency Graph': 'Graphe de Dépendance Automatisé',
+      'Upload a `package.json` or `go.mod`, and the app will visualize the attack surface and highlight vulnerable transitive dependencies using OSV.dev API.': 'Uploadez un `package.json` ou `go.mod`, et l\'app visualisera la surface d\'attaque et surlignera les dépendances transitives vulnérables via l\'API OSV.dev.',
+      '"Invisible Security" Mode': 'Mode "Sécurité Invisible"',
+      'Demonstrating eBPF (Tetragon) profiles that enforce security at the kernel level, requiring zero code changes from developers.': 'Démonstration de profils eBPF (Tetragon) qui appliquent la sécurité au niveau noyau, ne nécessitant aucun changement de code des développeurs.',
+
+      // Feedback
+      'Community Feedback': 'Retours de la Communauté',
+      'Leave a Review': 'Laisser un Avis',
+      'Name': 'Nom',
+      'Rating': 'Note',
+      'Comment': 'Commentaire',
+      'Submit Review': 'Envoyer l\'Avis',
+      'Please fill in all fields.': 'Veuillez remplir tous les champs.',
+      'Failed to submit review.': 'Échec de l\'envoi de l\'avis.',
+      'No reviews yet. Be the first!': 'Aucun avis pour l\'instant. Soyez le premier !',
+      'Unable to load reviews.': 'Impossible de charger les avis.',
+      "Check if 'reviews' table exists in Supabase.": "Vérifiez si la table 'reviews' existe dans Supabase.",
+
+      // Settings
+      'Settings': 'Paramètres',
+      'Theme': 'Thème',
+      'Language': 'Langue',
+      'Light (High Contrast)': 'Clair (Haut Contraste)',
+      'Dark': 'Sombre',
+      'System': 'Système',
+      'System / Regional': 'Système / Régional',
+      'English (Default)': 'Anglais (Défaut)',
+
+      // GitHub Sync
+      'GitHub Sync Storage': 'Stockage Sync GitHub',
+      'Sync your progress (Modules, Views, Settings) to a GitHub repository to use across devices.': 'Synchronisez votre progression (Modules, Vues, Paramètres) vers un dépôt GitHub pour l\'utiliser sur tous vos appareils.',
+      'Personal Access Token (PAT)': 'Personal Access Token (PAT)',
+      'Clear Token': 'Effacer le Token',
+      'Required Scope': 'Scope Requis',
+      'Secure Storage': 'Stockage Sécurisé',
+      'Your token is now encrypted/obfuscated before being saved to this device. It is safe from casual inspection.': 'Votre token est maintenant chiffré/obfusqué avant d\'être sauvegardé sur cet appareil. Il est protégé contre l\'inspection occasionnelle.',
+      'Owner': 'Propriétaire',
+      'Repo Name': 'Nom du Dépôt',
+      'File Path': 'Chemin du Fichier',
+      'Save Configuration': 'Sauvegarder la Configuration',
+      'PUSH (Save)': 'PUSH (Sauver)',
+      'PULL (Load)': 'PULL (Charger)',
+      'Processing...': 'Traitement...',
+      'Configuration saved securely.': 'Configuration sauvegardée de manière sécurisée.',
+      'Token removed from secure storage.': 'Token supprimé du stockage sécurisé.',
+      'Data successfully pushed to GitHub!': 'Données poussées avec succès vers GitHub !',
+      'Data restored from GitHub!': 'Données restaurées depuis GitHub !',
+      'Operation failed': 'Échec de l\'opération',
+
+      // Network Policy Illustration
+      'Network Traffic Visualization': 'Visualisation du Trafic Réseau',
+      'Current: Flat Network (Insecure)': 'Actuel : Réseau Plat (Non Sécurisé)',
+      'Current: Microsegmentation (Zero Trust)': 'Actuel : Microsegmentation (Zero Trust)',
+      'Flat Network': 'Réseau Plat',
+      'Microsegmentation': 'Microsegmentation',
+      'Security Alert: Lateral Movement Possible': 'Alerte Sécurité : Mouvement Latéral Possible',
+      'Policy Enforced: Zero Trust': 'Politique Appliquée : Zero Trust',
+      'In a flat network, if the Frontend is compromised, the attacker can directly access the Database and Admin panel.': 'Dans un réseau plat, si le Frontend est compromis, l\'attaquant peut accéder directement à la Base de Données et au panneau Admin.',
+      'Network Policies block all traffic by default. Only specific, allowed connections (Frontend -> Backend) are permitted.': 'Les Network Policies bloquent tout le trafic par défaut. Seules les connexions spécifiques autorisées (Frontend -> Backend) sont permises.',
     };
 
-    if (dict[sysLang] && dict[sysLang][key]) {
-      return dict[sysLang][key];
-    }
-    return key;
+    return dict[key] || key;
   };
 
   // --- Git Sync Handlers ---
@@ -186,6 +290,8 @@ const App: React.FC = () => {
   };
 
   // Filter modules by active phase
+  // Note: activePhase enum values are "Design & Base Images", etc. We must translate them for display but use raw for filter.
+  // Wait, the CURRICULUM objects have `phase` property matching the Enum.
   const phaseModules = CURRICULUM.filter(m => m.phase === activePhase);
   const activeModule = CURRICULUM.find(m => m.id === activeModuleId);
 
@@ -210,6 +316,7 @@ const App: React.FC = () => {
   // Handle phase change
   const handlePhaseChange = (phase: SDLCPhase) => {
     setActivePhase(phase);
+    // Find the first module in this phase from the CURRENT curriculum
     const firstModule = CURRICULUM.find(m => m.phase === phase);
     if (firstModule) {
       setActiveModuleId(firstModule.id);
@@ -288,7 +395,7 @@ const App: React.FC = () => {
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors border border-transparent
                   ${currentView === 'about' ? 'bg-gray-200 dark:bg-gray-800 text-sec-red' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'}
                 `}
-                title="About"
+                title={t('About Container Security Guide')}
               >
                 <InfoIcon className="w-4 h-4" />
               </button>
@@ -296,7 +403,7 @@ const App: React.FC = () => {
               <button 
                 onClick={() => setIsSyncModalOpen(true)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors border border-gray-200 dark:border-gray-700"
-                title="Sync to GitHub"
+                title={t('GitHub Sync Storage')}
               >
                 <Cloud className="w-4 h-4" />
               </button>
@@ -306,6 +413,7 @@ const App: React.FC = () => {
                 onThemeChange={setTheme}
                 currentLang={lang}
                 onLangChange={setLang}
+                translate={t}
               />
             </div>
 
@@ -339,7 +447,7 @@ const App: React.FC = () => {
               `}>
               <div className="sticky top-24">
                 <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-gray-600 dark:text-gray-500">
-                  {activePhase} {t('Modules')}
+                  {t(activePhase)} {t('Modules')}
                 </h3>
                 <div className="space-y-2">
                   {phaseModules.map(module => (
@@ -419,6 +527,7 @@ const App: React.FC = () => {
                   {/* Interactive Illustrations */}
                   {activeModuleId === 'deployment-gates' && <SecurityGateIllustration />}
                   {activeModuleId === 'threat-modeling' && <StrideGenerator />}
+                  {activeModuleId === 'network-policies' && <NetworkPolicyIllustration translate={t} />}
 
                   {/* Render Static Markdown */}
                   <div className="prose max-w-none prose-gray dark:prose-invert text-gray-900 dark:text-gray-300">
@@ -455,7 +564,7 @@ const App: React.FC = () => {
         </>
       )}
 
-      <ChatAssistant />
+      <ChatAssistant lang={currentLangCode} />
       
       {/* Footer */}
       <footer className="py-8 mt-12 transition-colors border-t bg-white border-gray-300 dark:bg-sec-black dark:border-gray-800">

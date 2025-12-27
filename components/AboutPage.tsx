@@ -25,12 +25,13 @@ export const AboutPage: React.FC<Props> = ({ onBack, translate }) => {
         <section className="bg-white dark:bg-card-bg border border-gray-300 dark:border-gray-700 rounded-2xl p-8 shadow-sm">
           <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
             <Terminal className="w-6 h-6 text-blue-500" />
-            Project Summary
+            Executive Summary
           </h2>
           <div className="prose dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
             <p>
               This application serves as a comprehensive "Secure Software Development Life Cycle" (SSDLC) guide tailored for 
-              Red Hat OpenShift and Kubernetes environments. It moves beyond static documentation by integrating:
+              <strong> Red Hat OpenShift </strong> and Kubernetes environments. It provides actionable guidance to harden 
+              your supply chain from the first line of code to runtime execution.
             </p>
             <ul className="grid md:grid-cols-2 gap-4 list-none pl-0 mt-4">
               <li className="flex items-start gap-2 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg">
@@ -39,7 +40,7 @@ export const AboutPage: React.FC<Props> = ({ onBack, translate }) => {
               </li>
               <li className="flex items-start gap-2 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg">
                 <Workflow className="w-5 h-5 text-sec-red mt-0.5" />
-                <span><strong>Interactive Tools:</strong> Features like the STRIDE Threat Modeler and Security Gate Simulator.</span>
+                <span><strong>East-West Protection:</strong> Dedicated focus on OpenShift Network Policies and microsegmentation.</span>
               </li>
               <li className="flex items-start gap-2 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg">
                 <Lightbulb className="w-5 h-5 text-sec-red mt-0.5" />

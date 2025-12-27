@@ -19,7 +19,7 @@ export const DEFAULT_GIT_CONFIG = {
   branch: 'main'
 };
 
-export const CURRICULUM: ModuleItem[] = [
+const CURRICULUM_EN: ModuleItem[] = [
   {
     id: 'base-images',
     title: 'Minimal & Distroless Images',
@@ -39,6 +39,23 @@ The container base image is the foundation of your security posture. Standard OS
 | **Shell** | Bash/Sh | Sh | None |
 | **CVE Count** | High | Low | Lowest |
 
+### 📰 Docker Security Update: Hardened Images (DHI)
+
+**Breaking News**: Docker has made **Docker Hardened Images (DHI)** free and open source for all developers.
+
+#### The Philosophy: Transparency & Trust
+DHI aims to fix the "black box" nature of some security vendors by providing a secure foundation built on trusted OSs like **Debian** and **Alpine**.
+*   **SLSA Level 3 Provenance**: Verifiable build integrity for every image.
+*   **Complete SBOMs**: A full, transparent bill of materials included by default.
+*   **Distroless Runtime**: Drastically shrinks the attack surface.
+*   **Public CVE Data**: Vulnerabilities are assessed transparently; no hidden or downgraded scores.
+
+#### Enterprise Grade vs. Open Source
+While the images are free, **DHI Enterprise** offers a **7-day SLA** for critical CVE remediation and a managed build service for customizing images (e.g., adding corporate certs) without breaking compliance.
+
+#### AI-Assisted Migration
+Docker is introducing an **AI assistant** to scan existing containers and automatically recommend or apply the equivalent Hardened Image, reducing the friction of migration.
+
 #### Implementation Example
 
 Using a multi-stage build to deploy a Go application on a generic static container:
@@ -56,7 +73,7 @@ COPY --from=builder /app/myapp /
 CMD ["/myapp"]
 \`\`\`
     `,
-    newsContext: 'Recent vulnerabilities in standard base images (glibc, openssl), updates to Wolfi OS, and trends in "chainguard" images.',
+    newsContext: 'Docker Hardened Images (DHI) release, SLSA Level 3 adoption, and the shift towards distroless/hardened base images by default.',
     securityTip: 'Update: Use **Docker Scout** (GA Dec 2023) to analyze base images. It provides deeper insights than traditional scanners by correlating CVEs with your specific application usage.'
   },
   {
@@ -577,34 +594,73 @@ conftest test -p policies/ deployment.yaml
   },
   {
     id: 'network-policies',
-    title: 'Network Segmentation',
+    title: 'Network Segmentation (East-West)',
     phase: SDLCPhase.DEPLOY,
-    shortDesc: 'Microsegmentation using CNI plugins.',
+    shortDesc: 'Securing traffic flow in OpenShift with Microsegmentation.',
     staticContent: `
-### Network Policies: The Cluster Firewall
+### OpenShift Network Policies: The Cluster Firewall
 
-By default, in Kubernetes, **all pods can talk to all other pods**, across all namespaces. This is a massive security risk (flat network).
+By default, OpenShift (like stock Kubernetes) utilizes a **flat network** model. This means every Pod can communicate with every other Pod in the cluster, across all projects (namespaces), unless isolated by the CNI.
 
-#### The "Default Deny" Stance
-The first step in securing a namespace should be applying a "Deny All" policy.
+#### 🛑 The Risk: Unchecked East-West Traffic
+"East-West" traffic refers to communication *inside* the cluster (Service-to-Service).
+*   **Bad Practice**: A flat network where the \`Frontend\` can talk directly to the \`Database\`, but also to the \`Payment-Service\` and the \`Admin-Dashboard\`.
+*   **Attack Scenario**: If the Frontend is compromised (e.g., via Log4Shell), the attacker has a direct line to probe the database or internal admin panels.
+
+*(See the interactive visualization above)*
+
+#### ✅ The Solution: Microsegmentation
+We use \`NetworkPolicies\` to create a "Zero Trust" network inside the cluster.
+
+**Step 1: The Default Deny (The "Firewall")**
+Apply this policy to every Project (Namespace) to block all incoming traffic by default. This forces you to explicitly allow what is needed.
 
 \`\`\`yaml
-apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
 metadata:
   name: default-deny-all
+  namespace: my-project
 spec:
   podSelector: {}
   policyTypes:
   - Ingress
-  - Egress
+  # - Egress (Optional, but recommended for high security)
 \`\`\`
 
-#### CNI Capabilities
-Standard \`NetworkPolicies\` are layer 3/4 (IP/Port). Advanced CNIs like **Cilium** allow Layer 7 filtering (HTTP methods, DNS names) and provide visual maps of traffic flows.
+**Step 2: Allow Specific Traffic (The "Hole")**
+Allow *only* the Frontend to talk to the Backend, and *only* on port 8080.
+
+\`\`\`yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-front-to-back
+  namespace: my-project
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+    ports:
+    - protocol: TCP
+      port: 8080
+\`\`\`
+
+#### OpenShift Specifics (OVN-Kubernetes)
+Modern OpenShift versions use **OVN-Kubernetes** as the default CNI.
+*   **Performance**: OVN uses Open vSwitch, which is highly efficient for enforcing these ACLs.
+*   **Visualization**: Use the **OpenShift Web Console > Topology** view. When you enable "Network Policy" overlay, you can visually see allowed traffic flows between components.
+*   **Multi-Tenancy**: OpenShift offers a \`NetworkPolicy\` mode called \`MultiTenant\` (in older SDN) or strict isolation in OVN. Ensure your project isolation is enabled.
     `,
-    newsContext: 'Adoption of Cilium and eBPF for networking, sidecar-less service meshes (Istio Ambient Mesh), and Gateway API security features.',
-    securityTip: 'Performance: Utilize **Cilium** with eBPF to enforce policies at the socket layer. This drops denied traffic before it even generates a packet, saving resources.'
+    newsContext: 'Adoption of Cilium and eBPF for networking in OpenShift, sidecar-less service meshes (Istio Ambient Mesh), and Gateway API security features.',
+    securityTip: 'Performance: Utilize **Cilium** (available in OpenShift) with eBPF to enforce policies at the socket layer. This drops denied traffic before it even generates a packet.'
   },
   {
     id: 'observability-sidecars',
@@ -718,9 +774,768 @@ Hardware features like **Intel SGX**, **AMD SEV**, or **TDX** allow creating "En
   },
 ];
 
+const CURRICULUM_FR: ModuleItem[] = [
+  {
+    id: 'base-images',
+    title: 'Images Minimales & Distroless',
+    phase: SDLCPhase.DESIGN,
+    shortDesc: 'Réduire la surface d\'attaque avec Alpine, Wolfi et Distroless.',
+    staticContent: `
+### L'Importance des Images de Base Minimales
+
+L'image de base (Base Image) est la fondation de votre posture de sécurité. Les images OS standards (comme \`ubuntu:latest\` ou \`node:latest\`) contiennent des gestionnaires de paquets, des shells et des librairies inutiles pour votre application mais très utiles pour les attaquants.
+
+#### Comparaison: Standard vs. Minimal
+
+| Feature | Standard (Debian/Ubuntu) | Minimal (Alpine) | Distroless (Google) |
+| :--- | :--- | :--- | :--- |
+| **Taille** | > 100MB | ~5MB | ~20MB |
+| **Package Mgr** | apt/dpkg | apk | Aucun |
+| **Shell** | Bash/Sh | Sh | Aucun |
+| **CVE Count** | Élevé | Faible | Très Faible |
+
+### 📰 Mise à Jour Sécurité: Docker Hardened Images (DHI)
+
+**Breaking News**: Docker a rendu les **Docker Hardened Images (DHI)** gratuites et open source pour tous les développeurs.
+
+#### La Philosophie: Transparence & Confiance
+DHI vise à corriger l'effet "boîte noire" de certains fournisseurs en offrant une fondation sécurisée basée sur des OS de confiance comme **Debian** et **Alpine**.
+*   **Provenance SLSA Niveau 3**: Intégrité du build vérifiable pour chaque image.
+*   **SBOMs Complets**: Une liste complète des composants (Bill of Materials) incluse par défaut.
+*   **Runtime Distroless**: Réduit drastiquement la surface d'attaque.
+*   **Données CVE Publiques**: Les vulnérabilités sont évaluées en toute transparence; pas de scores cachés ou dégradés.
+
+#### Enterprise Grade vs. Open Source
+Bien que les images soient gratuites, **DHI Enterprise** offre un **SLA de 7 jours** pour la correction des CVE critiques et un service de build géré pour la personnalisation des images (ex: ajout de certificats d'entreprise) sans briser la conformité.
+
+#### Migration Assistée par IA
+Docker introduit un **assistant IA** pour scanner les conteneurs existants et recommander ou appliquer automatiquement l'image durcie équivalente, réduisant la friction de migration.
+
+#### Exemple d'Implémentation
+
+Utilisation d'un build multi-stage pour déployer une application Go sur un conteneur statique générique :
+
+\`\`\`dockerfile
+# Build Stage
+FROM golang:1.21 as builder
+WORKDIR /app
+COPY . .
+RUN go build -o myapp main.go
+
+# Runtime Stage (Distroless)
+FROM gcr.io/distroless/static-debian11
+COPY --from=builder /app/myapp /
+CMD ["/myapp"]
+\`\`\`
+    `,
+    newsContext: 'Sortie des Docker Hardened Images (DHI), adoption de SLSA Niveau 3 et transition vers des images de base distroless/durcies par défaut.',
+    securityTip: 'Mise à jour: Utilisez **Docker Scout** (GA Dec 2023) pour analyser vos images de base. Il offre une analyse plus fine que les scanners traditionnels en corrélant les CVEs avec l\'utilisation réelle dans votre application.'
+  },
+  {
+    id: 'secure-architecture',
+    title: 'Architecture Sécurisée',
+    phase: SDLCPhase.DESIGN,
+    shortDesc: 'Threat modeling, isolation et principes Zero Trust.',
+    staticContent: `
+### Secure by Design
+
+La sécurité ne peut pas être "ajoutée" à la fin. Elle doit être architecturée dès le départ en utilisant les principes du **Zero Trust**.
+
+#### Patterns d'Architecture Clés
+
+1.  **Isolation par Namespace**: Traitez les Namespaces comme des frontières de location (soft tenancy). Utilisez \`ResourceQuotas\` et \`LimitRanges\` pour éviter les attaques de type "noisy neighbor".
+2.  **Moindre Privilège**: Les apps ne doivent parler qu'aux services nécessaires. Supposez que le réseau est hostile.
+3.  **Identité**: Utilisez Workload Identity (OIDC) au lieu de credentials statiques longue durée.
+
+#### Threat Modeling STRIDE pour Conteneurs
+
+*   **S**poofing (Usurpation): Un pod malveillant peut-il se faire passer pour un service légitime ? (Solution: mTLS)
+*   **T**ampering (Modification): L'image du conteneur peut-elle être modifiée ? (Solution: Tags Immuables & Signing)
+*   **R**epudiation (Répudiation): Les logs sont-ils persistants ? (Solution: Logging Centralisé)
+*   **I**nformation Disclosure (Divulgation): Les secrets sont-ils exposés ? (Solution: External Secrets/Vault)
+*   **D**enial of Service (Déni de Service): Un pod peut-il crasher le nœud ? (Solution: Limits & Requests)
+*   **E**levation of Privilege (Élévation): Un conteneur peut-il s'échapper vers l'hôte ? (Solution: no-new-privs, non-root)
+    `,
+    newsContext: 'Nouveaux patterns architecturaux dans Kubernetes 1.29+, mises à jour des définitions "Zero Trust" par le NIST/CISA concernant les conteneurs.',
+    securityTip: 'Astuce Architecture: Designez pour l\'**Isolation**. Kubernetes 1.28+ a introduit le support natif des SidecarContainers, garantissant que les sidecars de sécurité démarrent *avant* votre application principale.'
+  },
+  {
+    id: 'metadata-testing-design',
+    title: 'Métadonnées & Stratégie de Test',
+    phase: SDLCPhase.DESIGN,
+    shortDesc: 'Standards de labeling, non-régression et security gates.',
+    staticContent: `
+### Designer pour la Gouvernance & la Vérification
+
+Avant d'écrire du code, établissez le "Contrat" pour vos conteneurs. Cela inclut leur identification (Labels) et la vérification de leur sécurité (Stratégie de Test).
+
+#### 1. Standards de Labeling Kubernetes
+Les labels sont le mécanisme principal de regroupement dans K8s. Une taxonomie cohérente est vitale pour les Network Policies, le Reporting et l'Automatisation.
+
+**Labels Standards Recommandés (kubernetes.io):**
+\`\`\`yaml
+metadata:
+  labels:
+    app.kubernetes.io/name: my-app
+    app.kubernetes.io/instance: my-app-prod
+    app.kubernetes.io/version: "1.2.0"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: billing-system
+    app.kubernetes.io/managed-by: helm
+\`\`\`
+
+**Labels de Sécurité:**
+*   \`data-classification: restricted\` (Utilisé par les moteurs de Policy pour forcer le chiffrement).
+*   \`compliance: pci-dss\` (déclenche des logs d'audit spécifiques).
+*   \`owner: team-security\` (Point de contact pour les incidents).
+
+#### 2. Stratégie de Test de Sécurité
+Les tests de sécurité doivent être automatisés pour prévenir la **Régression** (réintroduction de vulnérabilités corrigées).
+
+| Type de Test | Phase | Exemple d'Outil | Objectif |
+| :--- | :--- | :--- | :--- |
+| **Linting** | Design/Dev | \`kube-linter\`, \`hadolint\` | Vérifier la syntaxe YAML/Dockerfile & best practices. |
+| **Policy Unit Tests** | Design/Build | \`opa test\` | **Non-régression** pour le Policy-as-Code. S'assurer qu'un changement de politique n'autorise pas accidentellement les conteneurs root. |
+| **SAST** | Build | \`semgrep\` | Trouver les failles dans le code. |
+| **DAST** | Staging | \`owasp-zap\` | Attaquer l'application en cours d'exécution. |
+
+#### 3. Designer la Non-Régression
+Lorsqu'un bug de sécurité est trouvé :
+1.  Corrigez le bug.
+2.  Écrivez un **Cas de Test Négatif** (ex: un "mauvais" manifeste qui *devrait* échouer à la validation).
+3.  Ajoutez-le à la suite CI.
+    `,
+    newsContext: 'Mises à jour des Labels Recommandés Kubernetes, tendances dans le "Policy Testing" (tests unitaires Rego), et best practices pour la non-régression dans l\'IaC.',
+    securityTip: 'Gouvernance: Forcez la présence du label `owner` via un Admission Controller. Si un pod crash ou déclenche une alerte, vous savez immédiatement qui contacter.'
+  },
+  {
+    id: 'threat-modeling',
+    title: 'Fondamentaux Threat Modeling',
+    phase: SDLCPhase.DESIGN,
+    shortDesc: 'Analyse approfondie STRIDE et risques.',
+    staticContent: `
+### Analyse Systématique des Risques
+
+Le threat modeling est le processus d'identification, d'énumération et de priorisation des menaces potentielles. Nous utilisons la méthodologie **STRIDE** pour analyser systématiquement les architectures de conteneurs.
+
+#### STRIDE en Détail pour Kubernetes
+
+| Menace | Définition | Contexte Conteneur | Mitigation |
+| :--- | :--- | :--- | :--- |
+| **S**poofing | Usurper une identité. | Un pod voyou réclame l'IP d'un service DB. | **mTLS** (Istio/Linkerd), Network Policies. |
+| **T**ampering | Modifier des données ou du code. | Injection de malware dans une image de base. | **Image Signing** (Cosign), Read-only Root FS. |
+| **R**epudiation | Nier avoir effectué une action. | Un développeur fait un \`kubectl delete\` sans logs. | **Audit Logs**, Remote logging (Fluentd/Splunk). |
+| **I**nformation Disclosure | Exposer des infos non autorisées. | Fuite de secrets dans les variables d'env ou les logs. | **External Secrets**, Chiffrement "At Rest". |
+| **D**enial of Service | Déni de service. | Un conteneur consomme 100% du CPU. | **Resource Quotas**, LimitRanges. |
+| **E**levation of Privilege | Gain de capacités non autorisées. | Évasion de conteneur vers l'hôte. | **Pod Security Standards** (Restricted), Seccomp. |
+
+#### Diagrammes de Flux de Données (DFD)
+Pour appliquer STRIDE efficacement, créez un DFD de votre cluster :
+1.  **Entités Externes**: Utilisateurs, systèmes CI/CD.
+2.  **Processus**: Pods, Deployments, Operators.
+3.  **Data Stores**: Persistent Volumes, ConfigMaps, Secrets, Bases de données.
+4.  **Flux de Données**: Trafic réseau (Ingress/Egress).
+5.  **Frontières de Confiance**: Frontières de Namespace, périmètre du Cluster.
+
+*Appliquez STRIDE à chaque élément traversant une Frontière de Confiance.*
+    `,
+    newsContext: 'Évolution des outils de threat modeling (OWASP Threat Dragon), nouveau threat modeling automatisé pour les applications cloud-native, et changements dans le paysage des menaces.',
+    securityTip: 'Conseil Modeling: Lors de la modélisation de conteneurs AI/ML, ajoutez explicitement **Model Poisoning** (Tampering) et **Inference API Exhaustion** (DoS) à votre analyse STRIDE.'
+  },
+  {
+    id: 'data-compliance',
+    title: 'Conformité & Souveraineté des Données',
+    phase: SDLCPhase.DESIGN,
+    shortDesc: 'GDPR, patterns de Résidence des données et Chiffrement.',
+    staticContent: `
+### Confidentialité & Conformité by Design
+
+Pour les industries régulées (Finance, Santé, Gouv), où le code s'exécute et où les données vivent est une exigence légale, pas seulement technique.
+
+#### Patterns de Souveraineté des Données (Node Affinity)
+Pour garantir que les données ne quittent jamais une juridiction spécifique (ex: "Allemagne Uniquement" pour GDPR), utilisez la **Node Affinity**.
+
+\`\`\`yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gdpr-compliant-db
+spec:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: region
+            operator: In
+            values:
+            - eu-central-1
+\`\`\`
+
+#### Standards de Chiffrement
+*   **At Rest**: Utilisez des plugins KMS pour chiffrer les Secrets dans etcd. Assurez-vous que les Persistent Volumes (PVs) sont chiffrés par le fournisseur de stockage.
+*   **In Transit**: Forcez TLS 1.2+ partout. Utilisez un Service Mesh (Istio/Linkerd) pour upgrader de façon transparente le TCP en mTLS.
+    `,
+    newsContext: 'Mises à jour sur les amendes GDPR liées aux données cloud, exigences conteneurs PCI-DSS v4.0, et tendances architecturales "Sovereign Cloud".',
+    securityTip: 'Conformité: Utilisez **Open Policy Agent (OPA)** pour forcer techniquement la résidence. Bloquez la création de Pod si le `nodeSelector` ne correspond pas à la région autorisée.'
+  },
+  {
+    id: 'supply-chain',
+    title: 'Supply Chain (SLSA)',
+    phase: SDLCPhase.BUILD,
+    shortDesc: 'Signature d\'image, SBOMs et le framework SLSA.',
+    staticContent: `
+### Sécuriser la Supply Chain Logicielle
+
+Un attaquant n'a pas besoin de pirater votre serveur de production s'il peut pirater votre serveur de build.
+
+#### Le Framework SLSA
+**Supply-chain Levels for Software Artifacts (SLSA)** aide à protéger contre la falsification.
+*   **Niveau 1**: La provenance existe (build scripté).
+*   **Niveau 2**: Service de build hébergé + provenance authentifiée.
+*   **Niveau 3**: Plateforme de build durcie (environnements éphémères).
+
+#### Les Outils du Métier
+*   **SBOM (Software Bill of Materials)**: Une liste d'ingrédients. Outils: \`syft\`, \`trivy\`.
+*   **Signing**: Prouver cryptographiquement l'auteur. Outils: \`cosign\`, \`notary\`.
+
+\`\`\`bash
+# Générer un SBOM
+syft packages:alpine:latest -o json > sbom.json
+
+# Signer une image avec Cosign
+cosign sign --key cosign.key my-registry/my-image:v1.0.0
+\`\`\`
+    `,
+    newsContext: 'Attaques récentes sur la supply chain (comme la backdoor xz utils), mises à jour de la spécification SLSA, et adoption des SBOMs dans la régulation gouvernementale.',
+    securityTip: 'Outillage: Utilisez `docker buildx build --attest type=provenance,mode=max` pour générer automatiquement des attestations de **provenance SLSA** détaillées attachées à votre image.'
+  },
+  {
+    id: 'build-strategies',
+    title: 'Stratégies de Build Sécurisées',
+    phase: SDLCPhase.BUILD,
+    shortDesc: 'CI/CD sûr, évitement des secrets et builds déterministes.',
+    staticContent: `
+### Durcir le Processus de Build
+
+L'environnement de build est souvent hautement privilégié (accès aux secrets, registres, code source).
+
+#### Best Practices
+
+1.  **Éviter les Secrets dans les Layers**: Ne jamais faire \`COPY id_rsa .\` ou \`ENV PASSWORD=...\`. Utilisez le montage de secrets au build-time.
+2.  **Pinner les Images de Base**: N'utilisez pas \`:latest\`. Utilisez les digests SHA256 pour l'immuabilité.
+    *   *Mauvais*: \`FROM node:latest\`
+    *   *Bon*: \`FROM node@sha256:4c2e...\`
+3.  **Builds Reproductibles**: S'assurer que le même code source produit toujours exactement le même binaire bit-pour-bit.
+
+#### Montage de Secret Sécurisé (BuildKit)
+\`\`\`dockerfile
+# Syntaxe pour monter un secret en toute sécurité sans persistance dans l'image finale
+RUN --mount=type=secret,id=mysecret \
+    cat /run/secrets/mysecret && \
+    ./script-requiring-secret.sh
+\`\`\`
+    `,
+    newsContext: 'Nouvelles fonctionnalités dans Docker BuildKit, risques de sécurité dans les pipelines CI/CD (GitHub Actions runners), et vulnérabilités "Leaky Vessels".',
+    securityTip: 'Optimisation: Considérez **Docker Build Cloud** (sorti en 2024) pour assurer que les builds s\'exécutent dans un environnement cohérent, éphémère et sécurisé, évitant les dérives de sécurité "ça marche sur ma machine".'
+  },
+  {
+    id: 'multi-stage-lifecycle',
+    title: 'Cycle de Vie Multi-Stage',
+    phase: SDLCPhase.BUILD,
+    shortDesc: 'Unifier Dev, Test (Recette) et Prod dans un seul Dockerfile.',
+    staticContent: `
+### Un Dockerfile, Trois Environnements
+
+Les builds multi-stage ne servent pas seulement à réduire la taille des images. Ils vous permettent de définir tout votre Cycle de Vie de Développement Logiciel (SDLC) — **Dev, Test/Recette, et Prod** — dans un seul fichier.
+
+#### 1. "Début" (Stage de Développement)
+Dans le stage de développement, nous avons besoin du hot-reloading, de debuggers et de SDKs complets. Nous ciblons ce stage localement.
+
+\`\`\`dockerfile
+# Base Stage (Dépendances communes)
+FROM node:20-alpine AS base
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+# Stage: Development
+# Inclut des outils comme nodemon et les devDependencies complètes
+FROM base AS dev
+RUN npm install -g nodemon
+COPY . .
+CMD ["nodemon", "server.js"]
+\`\`\`
+
+#### 2. "Recette" (Stage de Test)
+Avant de construire l'artefact, nous exécutons les tests *dans* le conteneur. Si ce stage échoue, le build de l'image s'arrête.
+
+\`\`\`dockerfile
+# Stage: Tester (Recette)
+FROM base AS tester
+COPY . .
+# Exécuter le linting et les tests unitaires dans le processus de build
+RUN npm run lint
+RUN npm run test
+\`\`\`
+
+#### 3. "Déploiement" (Stage de Production)
+Enfin, nous créons l'artefact léger et sécurisé. Nous ne copions *que* ce qui est nécessaire depuis les stages précédents.
+
+\`\`\`dockerfile
+# Stage: Production (Déploiement)
+FROM gcr.io/distroless/nodejs20-debian11 AS prod
+WORKDIR /app
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/package.json ./
+COPY --from=base /app/server.js ./
+CMD ["server.js"]
+\`\`\`
+
+#### Utilisation
+*   **Pour le Dev:** \`docker build --target dev -t myapp:dev .\`
+*   **Pour la CI/Recette:** \`docker build --target tester .\`
+*   **Pour la Prod:** \`docker build --target prod -t myapp:prod .\`
+    `,
+    newsContext: 'Adoption des "Hermetic Builds" où les tests se passent strictement dans les conteneurs pour éviter les problèmes "works on my machine".',
+    securityTip: 'Isolation: En exécutant les tests (Recette) dans un stage séparé, les secrets de test, les données de test et le code du test-runner ne sont jamais copiés dans l\'image de Production finale.'
+  },
+  {
+    id: 'security-testing',
+    title: 'Scan de Code & Dépendances',
+    phase: SDLCPhase.BUILD,
+    shortDesc: 'SAST, SCA et Test de Vulnérabilité d\'Image.',
+    staticContent: `
+### Shift Left: Tests de Sécurité Automatisés
+
+Détecter les vulnérabilités pendant la phase de Build est significativement moins cher et plus sûr que de les trouver en Production.
+
+#### 1. Static Application Security Testing (SAST)
+**Test "Boîte Blanche"**: Analyse le code source pour trouver des failles de sécurité sans l'exécuter.
+*   **Détecte**: Injections SQL, XSS, Buffer Overflows, Identifiants codés en dur.
+*   **Outils**: SonarQube, CodeQL, Semgrep.
+
+#### 2. Software Composition Analysis (SCA)
+**Test "Supply Chain"**: Analyse les librairies open-source et frameworks importés par votre code.
+*   **Détecte**: CVEs connues dans \`node_modules\`, \`pip\`, \`go.mod\`.
+*   **Outils**: Snyk, OWASP Dependency Check, Trivy.
+
+#### 3. Container Image Scanning
+Scanne l'image conteneur compilée (OS de base + Layers applicatifs).
+
+#### Intégration CI/CD Réelle
+
+**Scénario A: GitHub Actions avec Trivy**
+Ce workflow construit une image et fait échouer le pipeline si des vulnérabilités **CRITICAL** sont trouvées.
+
+\`\`\`yaml
+name: Build and Scan
+on: [push]
+jobs:
+  build-secure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Build Docker Image
+        run: docker build -t myapp:\${{ github.sha }} .
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'myapp:\${{ github.sha }}'
+          format: 'table'
+          # FAIL le build sur les problèmes Critiques
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+\`\`\`
+
+**Scénario B: GitLab CI avec Grype**
+Utilisation d'Anchore Grype pour scanner une image dans un pipeline GitLab.
+
+\`\`\`yaml
+security_scan:
+  stage: test
+  image: docker:stable
+  services:
+    - docker:dind
+  before_script:
+    # Installer Grype
+    - apk add curl
+    - curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+  script:
+    - docker build -t myapp:$CI_COMMIT_SHA .
+    # Scanner et FAIL sur sévérité Critique
+    - grype myapp:$CI_COMMIT_SHA --fail-on critical
+\`\`\`
+    `,
+    newsContext: 'Montée des outils SAST pilotés par IA, nouvelles régulations exigeant l\'analyse SCA (usage SBOM), et "Reachability Analysis" dans les scanners modernes.',
+    securityTip: 'Optimisation: Utilisez la **Reachability Analysis** (disponible dans des outils comme Snyk ou Endor Labs). Elle distingue une librairie vulnérable que vous avez *installée* d\'une que vous *appelez* réellement dans le code, réduisant le bruit de 80%.'
+  },
+  {
+    id: 'deployment-config',
+    title: 'Pod Security Standards',
+    phase: SDLCPhase.DEPLOY,
+    shortDesc: 'Application des profils Restricted/Baseline via PSS/PSA.',
+    staticContent: `
+### Kubernetes Pod Security Standards (PSS)
+
+Kubernetes a déprécié les \`PodSecurityPolicies\` (PSP) en faveur du contrôleur intégré **Pod Security Admission (PSA)**.
+
+#### Les Trois Profils
+1.  **Privileged**: Non restreint (Évitez de l'utiliser).
+2.  **Baseline**: Politique minimalement restrictive qui empêche les escalades de privilèges connues.
+3.  **Restricted**: Hautement restreint, suivant les meilleures pratiques de durcissement actuelles.
+
+#### Application via Labels de Namespace
+Vous pouvez appliquer ces standards simplement en labellisant votre namespace :
+
+\`\`\`yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-secure-app
+  labels:
+    # Forcer le standard restricted
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    # Avertir sur les violations baseline
+    pod-security.kubernetes.io/warn: baseline
+\`\`\`
+    `,
+    newsContext: 'Taux d\'adoption du profil PSS "Restricted", pièges communs lors de la migration depuis PSP, et mises à jour dans Kubernetes 1.30 concernant l\'admission control.',
+    securityTip: 'Durcissement: Définissez toujours `automountServiceAccountToken: false` dans votre PodSpec à moins que le pod n\'ait explicitement besoin de parler à l\'API Kubernetes.'
+  },
+  {
+    id: 'secrets-management',
+    title: 'Gestion des Secrets',
+    phase: SDLCPhase.DEPLOY,
+    shortDesc: 'External Secrets Operator, Vault et CSI.',
+    staticContent: `
+### Gérer les Secrets à l'Échelle
+
+Les Secrets Kubernetes natifs stockent les données dans \`etcd\` encodées en **base64**, ce qui n'est pas du chiffrement. Quiconque a accès à l'API peut les lire.
+
+#### Le Pattern "External"
+Au lieu de stocker les secrets dans Git (anti-pattern GitOps) ou de les créer manuellement, utilisez un opérateur pour synchroniser depuis un Vault dédié.
+
+**External Secrets Operator (ESO)**:
+1.  Se connecte à AWS Secrets Manager, Azure Key Vault, HashiCorp Vault.
+2.  Sonde les changements.
+3.  Crée/Met à jour un objet \`Secret\` K8s natif pour que le pod le consomme.
+
+#### Best Practice: Montages de Volume
+Montez les secrets comme des fichiers (tmpfs) plutôt que comme Variables d'Environnement. Les variables d'env peuvent fuiter via les crash dumps ou le système de fichiers \`proc\`.
+
+### ConfigMaps vs Secrets
+
+Bien que souvent utilisés ensemble, ils servent des objectifs différents :
+
+*   **ConfigMap**: Conçu pour les données de configuration non sensibles (ex: fichiers de config, variables d'env). Stocké en texte clair dans etcd.
+*   **Secret**: Conçu pour les données sensibles (ex: mots de passe, tokens OAuth, clés SSH). Stocké en chaînes encodées base64 dans etcd.
+
+#### Best Practices Secrets Kubernetes
+
+1.  **Chiffrement At Rest**: Par défaut, les secrets sont stockés non chiffrés dans etcd. Activez l'**Encryption Configuration** dans Kubernetes pour chiffrer les secrets au repos en utilisant un provider (comme un plugin KMS).
+2.  **RBAC**: Restreignez les permissions \`get\`, \`list\`, et \`watch\` sur les Secrets. Seuls des contrôleurs ou opérateurs spécifiques devraient avoir un accès large.
+3.  **Secrets Immuables**: Utilisez \`immutable: true\` pour les secrets stables afin de protéger contre les mises à jour accidentelles et améliorer la performance.
+
+### GitOps & Gestion des Secrets
+
+En GitOps, le dépôt git est la source de vérité. Cependant, **ne committez jamais de Secrets Kubernetes bruts dans Git**.
+
+#### Stratégie 1: Secrets Chiffrés dans Git
+Des outils comme **Sealed Secrets** ou **SOPS** vous permettent de stocker des données chiffrées dans Git, qui ne sont déchiffrées qu'à l'intérieur du cluster.
+
+*   **Bitnami Sealed Secrets**: Utilise le chiffrement asymétrique. Les développeurs chiffrent avec une clé publique (\`kubeseal\`), et le contrôleur du cluster déchiffre avec une clé privée. Sûr à committer (le CRD \`SealedSecret\`).
+*   **Mozilla SOPS**: Chiffre les valeurs YAML en utilisant un Cloud KMS (AWS/GCP/Azure) ou PGP. S'intègre parfaitement avec Flux et ArgoCD.
+
+#### Stratégie 2: Référencer des External Secrets (ESO)
+Ne stockez pas le secret dans Git du tout. Stockez une référence (manifeste) qui pointe vers le vrai secret dans un Vault.
+
+*   Committez une ressource custom \`ExternalSecret\` dans Git.
+*   Elle contient le *pointeur* (ex: "récupérer le secret \`db-pass\` depuis AWS Secrets Manager").
+*   L'opérateur récupère la valeur et crée le Secret Kubernetes.
+*   *Résultat*: Git ne contient aucune donnée sensible, seulement de la configuration.
+
+\`\`\`yaml
+# Exemple: ExternalSecret pointant vers AWS Secrets Manager
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: db-credentials
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: SecretStore
+  target:
+    name: db-secret-k8s # Le secret K8s à créer
+  data:
+  - secretKey: password
+    remoteRef:
+      key: production/db/password
+\`\`\`
+    `,
+    newsContext: 'Dernières intégrations pour External Secrets Operator, nouvelles attaques ciblant le chiffrement etcd, et comparaisons Vault vs Cloud Provider Secret Managers.',
+    securityTip: 'Rotation: Implémentez la **rotation automatique des secrets** dans votre Vault (AWS/HashiCorp). L\'External Secrets Operator peut automatiquement récupérer la nouvelle valeur et redémarrer les Pods.'
+  },
+  {
+    id: 'deployment-gates',
+    title: 'Policy as Code (OPA)',
+    phase: SDLCPhase.DEPLOY,
+    shortDesc: 'Admission controllers et deployment gates.',
+    staticContent: `
+### Le Gatekeeper du Déploiement
+
+Les Admission Controllers interceptent les requêtes vers l'API server Kubernetes *avant* la persistance de l'objet, mais *après* l'authentification et l'autorisation de la requête.
+
+#### OPA Gatekeeper vs Kyverno
+*   **OPA Gatekeeper**: Utilise **Rego**, un langage de requête spécialisé. Extrêmement puissant et flexible.
+*   **Kyverno**: Utilise des politiques Kubernetes Native (YAML). Plus facile à apprendre pour les admins K8s, mais légèrement moins flexible que Rego.
+
+#### 1. Interdire les Conteneurs Root (Rego)
+Cette politique assure qu'aucun conteneur ne tourne en tant que User ID 0 (root), atténuant les risques d'évasion de conteneur.
+
+\`\`\`rego
+package kubernetes.admission
+
+deny[msg] {
+  input.request.kind.kind == "Pod"
+  container := input.request.object.spec.containers[_]
+  not container.securityContext.runAsNonRoot
+  msg := sprintf("Container '%v' must set runAsNonRoot to true.", [container.name])
+}
+\`\`\`
+
+#### 2. Forcer la Provenance de l'Image (Trusted Registry)
+Assurez-vous que toutes les images viennent de votre registre interne de confiance (ex: \`registry.corp.com\`) pour empêcher le pull d'images publiques malveillantes.
+
+\`\`\`rego
+package kubernetes.admission
+
+deny[msg] {
+  input.request.kind.kind == "Pod"
+  container := input.request.object.spec.containers[_]
+  not startswith(container.image, "registry.corp.com/")
+  msg := sprintf("Image '%v' comes from an untrusted registry.", [container.image])
+}
+\`\`\`
+
+#### 3. Exiger des Labels de Propriété (Ownership)
+Rendre obligatoire des labels comme \`cost-center\` ou \`team\` pour tous les Déploiements afin d'assurer la responsabilité.
+
+\`\`\`rego
+package kubernetes.admission
+
+deny[msg] {
+  input.request.kind.kind == "Deployment"
+  not input.request.object.metadata.labels["team"]
+  msg := "Deployments must have a 'team' label."
+}
+\`\`\`
+
+#### Shift Left: Tester avec Conftest
+N'attendez pas que le cluster vous rejette. Testez les politiques dans votre pipeline CI/CD avec \`conftest\`.
+
+\`\`\`bash
+# Exécuter dans la CI avant helm install
+conftest test -p policies/ deployment.yaml
+\`\`\`
+    `,
+    newsContext: 'Mises à jour OPA/Gatekeeper (v3+), montée de Kyverno, et déplacement de la validation vers la gauche (CI pipeline) vs le cluster.',
+    securityTip: 'Workflow: Utilisez **chain-bench** (par Aquasec) dans votre pipeline pour auditer votre stack software supply chain contre les benchmarks CIS Software Supply Chain.'
+  },
+  {
+    id: 'network-policies',
+    title: 'Segmentation Réseau (Est-Ouest)',
+    phase: SDLCPhase.DEPLOY,
+    shortDesc: 'Sécuriser les flux OpenShift avec la Microsegmentation.',
+    staticContent: `
+### OpenShift Network Policies: Le Firewall du Cluster
+
+Par défaut, OpenShift (comme Kubernetes stock) utilise un modèle de **réseau plat**. Cela signifie que chaque Pod peut communiquer avec tous les autres Pods du cluster, à travers tous les projets (namespaces), à moins d'être isolé par le CNI.
+
+#### 🛑 Le Risque: Trafic Est-Ouest Non Contrôlé
+Le trafic "Est-Ouest" fait référence à la communication *à l'intérieur* du cluster (Service-à-Service).
+*   **Mauvaise Pratique**: Un réseau plat où le \`Frontend\` peut parler directement à la \`Database\`, mais aussi au \`Payment-Service\` et à l'\`Admin-Dashboard\`.
+*   **Scénario d'Attaque**: Si le Frontend est compromis (ex: via Log4Shell), l'attaquant a une ligne directe pour sonder la base de données ou les panneaux d'admin internes.
+
+*(Voir la visualisation interactive ci-dessus)*
+
+#### ✅ La Solution: Microsegmentation
+Nous utilisons les \`NetworkPolicies\` pour créer un réseau "Zero Trust" à l'intérieur du cluster.
+
+**Étape 1: Le Default Deny (Le "Pare-feu")**
+Appliquez cette politique à chaque Projet (Namespace) pour bloquer tout le trafic entrant par défaut. Cela vous force à autoriser explicitement ce qui est nécessaire.
+
+\`\`\`yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: default-deny-all
+  namespace: my-project
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  # - Egress (Optionnel, mais recommandé pour haute sécurité)
+\`\`\`
+
+**Étape 2: Autoriser le Trafic Spécifique (Le "Trou")**
+N'autorisez *que* le Frontend à parler au Backend, et *uniquement* sur le port 8080.
+
+\`\`\`yaml
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-front-to-back
+  namespace: my-project
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+    ports:
+    - protocol: TCP
+      port: 8080
+\`\`\`
+
+#### Spécificités OpenShift (OVN-Kubernetes)
+Les versions modernes d'OpenShift utilisent **OVN-Kubernetes** comme CNI par défaut.
+*   **Performance**: OVN utilise Open vSwitch, qui est hautement efficace pour appliquer ces ACLs.
+*   **Visualisation**: Utilisez la vue **OpenShift Web Console > Topology**. Quand vous activez l'overlay "Network Policy", vous pouvez voir visuellement les flux de trafic autorisés entre les composants.
+*   **Multi-Tenancy**: OpenShift offre un mode \`NetworkPolicy\` appelé \`MultiTenant\` (dans l'ancien SDN) ou une isolation stricte dans OVN. Assurez-vous que l'isolation de projet est activée.
+    `,
+    newsContext: 'Adoption de Cilium et eBPF pour le networking dans OpenShift, service meshes sidecar-less (Istio Ambient Mesh), et fonctionnalités de sécurité Gateway API.',
+    securityTip: 'Performance: Utilisez **Cilium** (disponible dans OpenShift) avec eBPF pour appliquer les politiques au niveau socket. Cela rejette le trafic refusé avant même qu\'il ne génère un paquet.'
+  },
+  {
+    id: 'observability-sidecars',
+    title: 'Sidecars & Debugging Sécurisé',
+    phase: SDLCPhase.RUNTIME,
+    shortDesc: 'Patterns Service Mesh, Sidecars et Conteneurs Éphémères.',
+    staticContent: `
+### Patterns pour l'Observabilité & le Debugging
+
+Dans le Kubernetes moderne, nous évitons d'installer des outils de debug (curl, netcat) dans les images de production pour les garder minimales. Alors comment debuguer ?
+
+#### Le Pattern Sidecar
+Un conteneur assistant tournant aux côtés de votre application principale dans le même Pod. Ils partagent le même réseau (localhost) et le même stockage.
+*   **Usages**: Log shipping (Fluentd), Proxy réseau (Envoy/Istio), Proxy base de données (Cloud SQL Auth).
+*   **Sécurité**: Les sidecars injectent de l'observabilité (Tracing/Metrics) sans modifier le code applicatif.
+
+#### Debugging Sécurisé: Conteneurs Éphémères
+Ne faites jamais de SSH dans les nœuds. Utilisez les **Conteneurs Éphémères** pour injecter temporairement des outils de debug dans un pod en cours d'exécution.
+
+\`\`\`bash
+# Au lieu de: ssh user@node
+# Utilisez:
+kubectl debug -it my-pod --image=nicolaka/netshoot --target=app-container
+\`\`\`
+Ceci crée un conteneur temporaire avec des outils réseau attachés au namespace process cible, qui disparaît quand vous quittez.
+    `,
+    newsContext: 'Montée des service meshes "Sidecar-less" (Istio Ambient), risques de sécurité des sidecars sur-privilégiés, et avancées dans la sécurité OpenTelemetry.',
+    securityTip: 'Tendance: Les maillages sans sidecar (comme **Istio Ambient Mesh** ou **Cilium Service Mesh**) réduisent la surface d\'attaque en déplaçant la logique proxy vers des agents sécurisés par nœud.'
+  },
+  {
+    id: 'multi-arch-security',
+    title: 'Isolation Multi-OS & Kernel',
+    phase: SDLCPhase.DEPLOY,
+    shortDesc: 'gVisor, Kata Containers et nœuds Windows.',
+    staticContent: `
+### Briser le Modèle de Noyau Partagé
+
+Les conteneurs standards partagent le noyau Linux de l'hôte. Une vulnérabilité noyau (comme Dirty Cow) permet l'évasion de conteneur.
+
+#### Conteneurs Sandboxés
+Pour les workloads à haut risque (exécutant du code non approuvé), utilisez une isolation plus forte :
+
+*   **gVisor (Google)**: Un shim noyau en userspace. Intercepte les syscalls. Ajoute de l'overhead mais une grande sécurité.
+*   **Kata Containers**: Exécute chaque pod dans une micro-VM légère. Isolation au niveau matériel.
+
+#### Runtime Classes
+Vous pouvez définir quelle technologie d'isolation un pod utilise via \`RuntimeClass\`.
+
+\`\`\`yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: untrusted-workload
+spec:
+  runtimeClassName: gvisor
+  containers:
+  - name: app
+    image: python-script-executor
+\`\`\`
+    `,
+    newsContext: 'Améliorations de performance dans Kata Containers v3, nouveaux modèles de sécurité WASM (WebAssembly), et mises à jour de l\'isolation des conteneurs Windows.',
+    securityTip: 'Recommandation: Pour exécuter du code non approuvé (ex: scripts clients), les namespaces standards sont insuffisants. L\'utilisation obligatoire de **gVisor** ou **Kata Containers** est recommandée.'
+  },
+  {
+    id: 'runtime-security',
+    title: 'Sécurité Runtime (Falco)',
+    phase: SDLCPhase.RUNTIME,
+    shortDesc: 'Analyse comportementale et détection d\'anomalies.',
+    staticContent: `
+### Détecter les "Inconnues Inconnues"
+
+Le scan statique trouve les vulnérabilités (CVEs). La sécurité runtime trouve les **attaques** qui se produisent actuellement.
+
+#### Falco & eBPF
+Falco surveille les appels système du noyau en temps réel. Il peut alerter sur un comportement suspect que l'analyse statique manque.
+
+**Alertes Typiques:**
+*   Un shell (\`bash\`) lancé dans un conteneur de production.
+*   Modification de \`/etc/passwd\`.
+*   Connexion sortante vers une IP de pool de crypto-mining.
+*   Lecture de fichiers sensibles (certificats/clés).
+
+#### Réponse
+La réponse automatisée (via des outils comme Falco Sidekick) peut immédiatement tuer un pod compromis ou isoler (cordon) le nœud pour l'analyse forensique.
+    `,
+    newsContext: 'Nouvelles règles Falco pour les attaques K8s, évolution d\'eBPF pour l\'observabilité sécurité, et fonctionnalités d\'application runtime Tetragon (Cilium).',
+    securityTip: 'Application: **Tetragon** (par Isovalent) uses eBPF pour appliquer de manière transparente des politiques runtime, capable de tuer un processus *avant* qu\'un syscall malveillant ne se termine.'
+  },
+  {
+    id: 'confidential-computing',
+    title: 'Confidential Computing',
+    phase: SDLCPhase.RUNTIME,
+    shortDesc: 'Protection matérielle (TEEs/SGX/SEV).',
+    staticContent: `
+### Protéger les Données "In Use"
+
+Nous chiffrons les données au repos (Disque) et en transit (TLS). Mais les données en RAM sont généralement en clair. Le **Confidential Computing** résout cela.
+
+#### Trusted Execution Environments (TEEs)
+Les fonctionnalités matérielles comme **Intel SGX**, **AMD SEV**, ou **TDX** permettent de créer des "Enclaves".
+*   L'OS hôte / Hyperviseur ne peut pas lire la mémoire de l'enclave.
+*   Les admins Cloud ne peuvent pas lire la mémoire.
+
+#### Cas d'Usage
+*   Calcul multi-partie (banques partageant des données de fraude sans révéler les clients).
+*   Exécution de modèles IA sur des données de santé sensibles.
+*   Systèmes de Gestion de Clés (KMS).
+    `,
+    newsContext: 'Les principaux fournisseurs Cloud (Azure/AWS/GCP) étendent les offres de Confidential Computing (Confidential GKE), et mises à jour des services d\'attestation.',
+    securityTip: 'Adoption: Azure et GCP offrent maintenant des **Nœuds Confidentiels** pour GKE/AKS. Activez-le pour les workloads financiers ou de santé pour protéger les données en mémoire des compromissions de l\'hôte.'
+  },
+];
+
 export const ICONS: Record<string, any> = {
   [SDLCPhase.DESIGN]: Shield,
   [SDLCPhase.BUILD]: Box,
   [SDLCPhase.DEPLOY]: Server,
   [SDLCPhase.RUNTIME]: Activity,
+};
+
+export const getCurriculum = (lang: string): ModuleItem[] => {
+  return lang === 'fr' ? CURRICULUM_FR : CURRICULUM_EN;
 };

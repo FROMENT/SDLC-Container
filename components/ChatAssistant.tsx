@@ -3,13 +3,28 @@ import { MessageSquare, X, Send, Cpu } from 'lucide-react';
 import { generateChatResponse } from '../services/geminiService';
 import { ChatMessage } from '../types';
 
-export const ChatAssistant: React.FC = () => {
+interface Props {
+  lang?: string;
+}
+
+export const ChatAssistant: React.FC<Props> = ({ lang = 'en' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'model', text: 'Hello! Ask me anything about Kubernetes or Container Security.', timestamp: Date.now() }
-  ]);
+  
+  const initialGreeting = lang === 'fr' 
+    ? 'Bonjour ! Posez-moi vos questions sur Kubernetes ou la Sécurité des Conteneurs.'
+    : 'Hello! Ask me anything about Kubernetes or Container Security.';
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Only set initial message once or when lang changes and list is empty? 
+  // Better to just init with the localized string on mount or lang change if empty.
+  useEffect(() => {
+     if (messages.length === 0) {
+        setMessages([{ role: 'model', text: initialGreeting, timestamp: Date.now() }]);
+     }
+  }, [lang]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -92,7 +107,7 @@ export const ChatAssistant: React.FC = () => {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Ask about CVEs, PSS, OPA..."
+                placeholder={lang === 'fr' ? "Posez une question sur les CVEs, PSS..." : "Ask about CVEs, PSS, OPA..."}
                 className="flex-1 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sec-red dark:focus:border-sec-red transition-colors"
               />
               <button 
