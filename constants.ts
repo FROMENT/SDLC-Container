@@ -1605,7 +1605,7 @@ Le scan statique trouve les vulnérabilités (CVEs). La sécurité runtime trouv
 Falco surveille les appels système du noyau en temps réel. Il peut alerter sur un comportement suspect que l'analyse statique manque.
 
 **Alertes Typiques:**
-*   Un shell (\`bash\`) lancé dans un conteneur de production.
+*   A shell (\`bash\`) lancé dans un conteneur de production.
 *   Modification de \`/etc/passwd\`.
 *   Connexion sortante vers une IP de pool de crypto-mining.
 *   Lecture de fichiers sensibles (certificats/clés).

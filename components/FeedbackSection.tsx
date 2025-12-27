@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, Review } from '../services/supabaseClient';
-import { Star, Send, User, MessageSquare, Loader2, AlertCircle } from 'lucide-react';
+import { Star, Send, User, MessageSquare, Loader2, AlertCircle, Quote } from 'lucide-react';
 
 interface Props {
   translate?: (key: string) => string;
@@ -15,9 +15,13 @@ export const FeedbackSection: React.FC<Props> = ({ translate }) => {
   
   // Form State
   const [name, setName] = useState('');
+  const [title, setTitle] = useState(''); // Added Title state
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
+
+  // Identifier for this application in the shared reviews table
+  const SITE_NAME = 'container-security-guide';
 
   useEffect(() => {
     fetchReviews();
@@ -25,10 +29,10 @@ export const FeedbackSection: React.FC<Props> = ({ translate }) => {
 
   const fetchReviews = async () => {
     try {
-      // Assuming a table named 'reviews' exists
       const { data, error } = await supabase
         .from('reviews')
         .select('*')
+        .eq('site_name', SITE_NAME) // Only fetch reviews for this app
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -42,7 +46,6 @@ export const FeedbackSection: React.FC<Props> = ({ translate }) => {
       }
     } catch (err: any) {
       console.warn("Supabase Error:", err.message);
-      // If table doesn't exist (404) or connection fails
       setConnectionError(true);
     } finally {
       setLoading(false);
@@ -51,7 +54,8 @@ export const FeedbackSection: React.FC<Props> = ({ translate }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !comment.trim()) {
+    // Validate all mandatory fields per schema
+    if (!name.trim() || !comment.trim() || !title.trim()) {
       setError(t('Please fill in all fields.'));
       return;
     }
@@ -61,12 +65,19 @@ export const FeedbackSection: React.FC<Props> = ({ translate }) => {
     try {
       const { error } = await supabase
         .from('reviews')
-        .insert([{ name, rating, comment }]);
+        .insert([{ 
+          site_name: SITE_NAME, // Mandatory
+          name, 
+          title, // Mandatory
+          rating, 
+          comment 
+        }]);
 
       if (error) throw error;
 
       // Reset form and refetch
       setName('');
+      setTitle('');
       setComment('');
       setRating(5);
       await fetchReviews();
@@ -99,6 +110,18 @@ export const FeedbackSection: React.FC<Props> = ({ translate }) => {
                 placeholder="Cyber_Punk_2077"
               />
             </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Title</label>
+              <input 
+                type="text" 
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm dark:text-white focus:ring-2 focus:ring-sec-red focus:outline-none"
+                placeholder="Great resource for K8s!"
+              />
+            </div>
+
             <div>
               <label className="block text-xs font-bold uppercase text-gray-500 mb-1">{t('Rating')}</label>
               <div className="flex gap-2">
@@ -139,7 +162,7 @@ export const FeedbackSection: React.FC<Props> = ({ translate }) => {
         </div>
 
         {/* List */}
-        <div className="space-y-4 max-h-[500px] overflow-y-auto">
+        <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
           {loading ? (
              <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-gray-400" /></div>
           ) : connectionError ? (
@@ -152,13 +175,16 @@ export const FeedbackSection: React.FC<Props> = ({ translate }) => {
              <div className="text-center p-8 text-gray-500 italic">{t('No reviews yet. Be the first!')}</div>
           ) : (
             reviews.map((rev, idx) => (
-              <div key={rev.id || idx} className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700/50 animate-fade-in">
+              <div key={rev.id || idx} className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700/50 animate-fade-in hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
                  <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-2">
                         <div className="bg-gray-200 dark:bg-gray-700 p-1.5 rounded-full">
                             <User className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                         </div>
-                        <span className="font-bold text-sm text-gray-800 dark:text-gray-200">{rev.name}</span>
+                        <div>
+                          <span className="font-bold text-sm text-gray-800 dark:text-gray-200 block leading-tight">{rev.name}</span>
+                          {rev.title && <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{rev.title}</span>}
+                        </div>
                     </div>
                     <div className="flex">
                         {[...Array(5)].map((_, i) => (
@@ -166,10 +192,23 @@ export const FeedbackSection: React.FC<Props> = ({ translate }) => {
                         ))}
                     </div>
                  </div>
-                 <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">"{rev.comment}"</p>
-                 <span className="text-[10px] text-gray-400 mt-2 block">
-                    {rev.created_at ? new Date(rev.created_at).toLocaleDateString() : 'Just now'}
-                 </span>
+                 
+                 <div className="relative pl-3 border-l-2 border-gray-200 dark:border-gray-700 mt-3">
+                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed italic">
+                      "{rev.comment}"
+                    </p>
+                 </div>
+
+                 <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                    <span className="text-[10px] text-gray-400">
+                        {rev.created_at ? new Date(rev.created_at).toLocaleDateString() : 'Just now'}
+                    </span>
+                    {rev.site_name && rev.site_name !== SITE_NAME && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-900 text-gray-500 border border-gray-200 dark:border-gray-800">
+                        via {rev.site_name}
+                      </span>
+                    )}
+                 </div>
               </div>
             ))
           )}
