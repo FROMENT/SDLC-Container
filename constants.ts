@@ -26,52 +26,50 @@ const CURRICULUM_EN: ModuleItem[] = [
     phase: SDLCPhase.DESIGN,
     shortDesc: 'Reducing attack surface with Alpine, Wolfi, and Distroless.',
     staticContent: `
-### The Importance of Minimal Base Images
+### The "Good Way" to Manage Base Images
 
-The container base image is the foundation of your security posture. Standard OS images (like \`ubuntu:latest\` or \`node:latest\`) contain package managers, shells, and system libraries that are unnecessary for your application but useful for attackers.
+Security starts with the base image. The "Good Way" is to **decouple the Build environment from the Runtime environment**. Reducing the attack surface isn't just about size; it's about removing tools that attackers use (shells, package managers, network tools).
 
-#### Comparison: Standard vs. Minimal
+#### 1. The "Good Time": Build vs Runtime
 
-| Feature | Standard (Debian/Ubuntu) | Minimal (Alpine) | Distroless (Google) |
-| :--- | :--- | :--- | :--- |
-| **Size** | > 100MB | ~5MB | ~20MB |
-| **Package Mgr** | apt/dpkg | apk | None |
-| **Shell** | Bash/Sh | Sh | None |
-| **CVE Count** | High | Low | Lowest |
+*   **Build Time**: You need compilers (\`gcc\`, \`go\`), build tools (\`make\`, \`maven\`, \`npm\`), and header files. These are **heavy** and **dangerous** in production.
+*   **Runtime**: You only need your compiled binary (or bytecode) and the OS dependencies (glibc/musl). You do *not* need a shell (\`/bin/bash\`), package manager (\`apt\`, \`apk\`), or \`curl\`.
 
-### 📰 Docker Security Update: Hardened Images (DHI)
+#### 2. The Golden Rule: Multi-Stage Builds
 
-**Breaking News**: Docker has made **Docker Hardened Images (DHI)** free and open source for all developers.
-
-#### The Philosophy: Transparency & Trust
-DHI aims to fix the "black box" nature of some security vendors by providing a secure foundation built on trusted OSs like **Debian** and **Alpine**.
-*   **SLSA Level 3 Provenance**: Verifiable build integrity for every image.
-*   **Complete SBOMs**: A full, transparent bill of materials included by default.
-*   **Distroless Runtime**: Drastically shrinks the attack surface.
-*   **Public CVE Data**: Vulnerabilities are assessed transparently; no hidden or downgraded scores.
-
-#### Enterprise Grade vs. Open Source
-While the images are free, **DHI Enterprise** offers a **7-day SLA** for critical CVE remediation and a managed build service for customizing images (e.g., adding corporate certs) without breaking compliance.
-
-#### AI-Assisted Migration
-Docker is introducing an **AI assistant** to scan existing containers and automatically recommend or apply the equivalent Hardened Image, reducing the friction of migration.
-
-#### Implementation Example
-
-Using a multi-stage build to deploy a Go application on a generic static container:
+Never ship your build tools to production. Use multi-stage builds to strictly separate these two phases in a single Dockerfile.
 
 \`\`\`dockerfile
-# Build Stage
-FROM golang:1.21 as builder
-WORKDIR /app
+# --- Stage 1: Build (The "Factory") ---
+# We use a fat image with all necessary tools
+FROM golang:1.21 AS builder
+WORKDIR /src
 COPY . .
-RUN go build -o myapp main.go
+# We build a static binary (self-contained)
+RUN CGO_ENABLED=0 go build -o my-app main.go
 
-# Runtime Stage (Distroless)
-FROM gcr.io/distroless/static-debian11
-COPY --from=builder /app/myapp /
-CMD ["/myapp"]
+# --- Stage 2: Runtime (The "Product") ---
+# We use Distroless: No shell, no package manager, just the app
+FROM gcr.io/distroless/static-debian12
+COPY --from=builder /src/my-app /
+# Security: Always run as non-root (Distroless provides this user)
+USER nonroot:nonroot
+CMD ["/my-app"]
 \`\`\`
+
+#### 3. Choosing the Right Flavor (Wolfi vs Distroless vs Alpine)
+
+| Type | Best For | Pros | Cons |
+| :--- | :--- | :--- | :--- |
+| **Distroless** (Google) | Go, Rust, Java, Python | Zero bloat, **No Shell** (Max Security). | Hard to debug (requires \`kubectl debug\`). |
+| **Wolfi** (Chainguard) | Modern Cloud Native | **Zero CVE** focus, granular packages, SBOM native. | Newer ecosystem, different package repo. |
+| **Alpine** | Node.js, PHP, General | Tiny (~5MB), has \`apk\` and \`sh\`. | Uses \`musl\` libc (can cause DNS/Performance issues). |
+| **Debian Slim** | Legacy Apps | Maximum compatibility (glibc). | Still contains \`apt\`/\`dpkg\` (larger attack surface). |
+
+#### 4. Managing Vulnerabilities (The "Zero CVE" Goal)
+
+*   **The Problem**: Old stable images (Debian 11) rarely update packages, leading to "noise" from unpatched, low-severity CVEs.
+*   **The Solution**: Use **Wolfi** (or Chainguard Images). It is an "undistro" designed specifically for containers that releases daily updates, aiming for **Zero CVEs** by default, making your scanners green and alerts meaningful.
     `,
     newsContext: 'Docker Hardened Images (DHI) release, SLSA Level 3 adoption, and the shift towards distroless/hardened base images by default.',
     securityTip: 'Update: Use **Docker Scout** (GA Dec 2023) to analyze base images. It provides deeper insights than traditional scanners by correlating CVEs with your specific application usage.'
@@ -416,7 +414,7 @@ security_scan:
 \`\`\`
     `,
     newsContext: 'Rise of AI-powered SAST tools, new regulations requiring SCA analysis (SBOM usage), and "Reachability Analysis" in modern scanners.',
-    securityTip: 'Optimization: Use **Reachability Analysis** (available in tools like Snyk or Endor Labs). It distinguishes between a vulnerable library you *installed* vs. one you actually *call* in code, reducing noise by 80%.'
+    securityTip: 'Optimisation: Use **Reachability Analysis** (available in tools like Snyk or Endor Labs). It distinguishes between a vulnerable library you *installed* vs. one you actually *call* in code, reducing noise by 80%.'
   },
   {
     id: 'deployment-config',
@@ -532,62 +530,67 @@ spec:
     phase: SDLCPhase.DEPLOY,
     shortDesc: 'Admission controllers and deployment gates.',
     staticContent: `
-### The Deployment Gatekeeper
+### Policy as Code: The Implementation Guide
 
-Admission Controllers intercept requests to the Kubernetes API server *before* persistence of the object, but *after* the request is authenticated and authorized.
+Admission Controllers intercept requests to the Kubernetes API server *before* persistence. This is where we enforce the "Contract" defined in Design.
 
-#### OPA Gatekeeper vs Kyverno
-*   **OPA Gatekeeper**: Uses **Rego**, a specialized query language. Extremely powerful and flexible.
-*   **Kyverno**: Uses Kubernetes Native Policy (YAML). Easier to learn for K8s admins, but slightly less flexible than Rego.
+#### 1. The Matrix: Who, Where, When?
 
-#### 1. Disallow Root Containers (Rego)
-This policy ensures no container runs as User ID 0 (root), mitigating container escape risks.
+| Role | Action | Tool | Location |
+| :--- | :--- | :--- | :--- |
+| **Security Engineer** | Writes the Policy (Rego/YAML). | OPA / Kyverno | **Git Repository** (Policy Repo) |
+| **Platform Engineer** | Installs the Controller & Enforces Policy. | Helm / ArgocD | **K8s Cluster** (Admission Controller) |
+| **Developer** | Checks violations locally/CI. | Conftest / Kyverno CLI | **CI Pipeline** (Shift Left) |
+
+#### 2. Step-by-Step Implementation
+
+**Step 1: Define the Policy (The Contract)**
+Policies should be treated as code. They live in Git, are versioned, and reviewed.
+*   *Example (Rego)*: "All images must come from \`registry.corp.com\`".
 
 \`\`\`rego
+# policy/image_registry.rego
 package kubernetes.admission
-
 deny[msg] {
   input.request.kind.kind == "Pod"
-  container := input.request.object.spec.containers[_]
-  not container.securityContext.runAsNonRoot
-  msg := sprintf("Container '%v' must set runAsNonRoot to true.", [container.name])
+  image := input.request.object.spec.containers[_].image
+  not startswith(image, "registry.corp.com/")
+  msg := sprintf("Image '%v' is from an untrusted registry.", [image])
 }
 \`\`\`
 
-#### 2. Enforce Image Provenance (Trusted Registry)
-Ensure all images come from your trusted internal registry (e.g., \`registry.corp.com\`) to prevent pulling malicious public images.
-
-\`\`\`rego
-package kubernetes.admission
-
-deny[msg] {
-  input.request.kind.kind == "Pod"
-  container := input.request.object.spec.containers[_]
-  not startswith(container.image, "registry.corp.com/")
-  msg := sprintf("Image '%v' comes from an untrusted registry.", [container.image])
-}
-\`\`\`
-
-#### 3. Require Ownership Labels
-Mandate labels like \`cost-center\` or \`team\` for all Deployments to ensure accountability.
-
-\`\`\`rego
-package kubernetes.admission
-
-deny[msg] {
-  input.request.kind.kind == "Deployment"
-  not input.request.object.metadata.labels["team"]
-  msg := "Deployments must have a 'team' label."
-}
-\`\`\`
-
-#### Shift Left: Testing with Conftest
-Don't wait for the cluster to reject you. Test policies in your CI/CD pipeline using \`conftest\`.
+**Step 2: Test in CI (The Soft Gate)**
+Do not wait for deployment to fail. Fail the build in CI/CD using \`conftest\` (for OPA) or \`kyverno apply\` (for Kyverno).
 
 \`\`\`bash
-# Run in CI before helm install
-conftest test -p policies/ deployment.yaml
+# .gitlab-ci.yml
+policy_check:
+  stage: test
+  image: openpolicyagent/conftest
+  script:
+    - conftest test --policy policy/ deployment.yaml
 \`\`\`
+
+**Step 3: Audit in Cluster (The Dry Run)**
+Deploy the policy to Kubernetes in **Warn/Audit** mode first.
+*   **OPA Gatekeeper**: Set \`enforcementAction: dryrun\`.
+*   **Kyverno**: Set \`validationFailureAction: Audit\`.
+*   *Goal*: Monitor logs for a week to see what *would* break. Fix existing violations.
+
+**Step 4: Enforce (The Hard Gate)**
+Once logs are clean, switch to **Enforce/Deny**. Now, any non-compliant deployment is rejected by the API Server.
+
+#### 3. Common Policies to Implement
+
+*   **Disallow Root**: Enforce \`runAsNonRoot: true\`.
+*   **Require Probes**: Ensure Liveness/Readiness probes exist.
+*   **Ownership Labels**: Mandate \`team\` or \`cost-center\` labels.
+
+#### Recommendation: The Safe Rollout
+**Never enforce a blocking policy on Day 1.**
+1.  **Week 1**: Deploy Policy in \`Audit\` mode.
+2.  **Week 2**: Review Splunk/Datadog logs for violations. Contact teams to fix configs.
+3.  **Week 3**: Switch to \`Enforce\` mode.
     `,
     newsContext: 'Updates to OPA/Gatekeeper (v3+), the rise of Kyverno, and shifting validation left to the CI pipeline vs the cluster.',
     securityTip: 'Workflow: Use **chain-bench** (by Aquasec) in your pipeline to audit your software supply chain stack against CIS Software Supply Chain benchmarks.'
@@ -834,52 +837,50 @@ const CURRICULUM_FR: ModuleItem[] = [
     phase: SDLCPhase.DESIGN,
     shortDesc: 'Réduire la surface d\'attaque avec Alpine, Wolfi et Distroless.',
     staticContent: `
-### L'Importance des Images de Base Minimales
+### La "Bonne Façon" de Gérer les Images de Base
 
-L'image de base (Base Image) est la fondation de votre posture de sécurité. Les images OS standards (comme \`ubuntu:latest\` ou \`node:latest\`) contiennent des gestionnaires de paquets, des shells et des librairies inutiles pour votre application mais très utiles pour les attaquants.
+La sécurité commence par l'image de base. La "Bonne Façon" est de **découpler l'environnement de Build de l'environnement Runtime**. Réduire la surface d'attaque ne concerne pas seulement la taille; il s'agit de supprimer les outils que les attaquants utilisent (shells, gestionnaires de paquets, curl).
 
-#### Comparaison: Standard vs. Minimal
+#### 1. Le "Bon Moment": Build vs Runtime
 
-| Feature | Standard (Debian/Ubuntu) | Minimal (Alpine) | Distroless (Google) |
-| :--- | :--- | :--- | :--- |
-| **Taille** | > 100MB | ~5MB | ~20MB |
-| **Package Mgr** | apt/dpkg | apk | Aucun |
-| **Shell** | Bash/Sh | Sh | Aucun |
-| **CVE Count** | Élevé | Faible | Très Faible |
+*   **Build Time**: Vous avez besoin de compilateurs (\`gcc\`, \`go\`), d'outils de build (\`make\`, \`maven\`), et de headers. Ils sont **lourds** et **dangereux** en production.
+*   **Runtime**: Vous n'avez besoin que de votre binaire (ou bytecode) et des dépendances OS (glibc/musl). Vous n'avez *pas* besoin d'un shell (\`/bin/bash\`), d'un gestionnaire de paquets (\`apt\`, \`apk\`) ou de \`curl\`.
 
-### 📰 Mise à Jour Sécurité: Docker Hardened Images (DHI)
+#### 2. La Règle d'Or: Builds Multi-Stage
 
-**Breaking News**: Docker a rendu les **Docker Hardened Images (DHI)** gratuites et open source pour tous les développeurs.
-
-#### La Philosophie: Transparence & Confiance
-DHI vise à corriger l'effet "boîte noire" de certains fournisseurs en offrant une fondation sécurisée basée sur des OS de confiance comme **Debian** et **Alpine**.
-*   **Provenance SLSA Niveau 3**: Intégrité du build vérifiable pour chaque image.
-*   **SBOMs Complets**: Une liste complète des composants (Bill of Materials) incluse par défaut.
-*   **Runtime Distroless**: Réduit drastiquement la surface d'attaque.
-*   **Données CVE Publiques**: Les vulnérabilités sont évaluées en toute transparence; pas de scores cachés ou dégradés.
-
-#### Enterprise Grade vs. Open Source
-Bien que les images soient gratuites, **DHI Enterprise** offre un **SLA de 7 jours** pour la correction des CVE critiques et un service de build géré pour la personnalisation des images (ex: ajout de certificats d'entreprise) sans briser la conformité.
-
-#### Migration Assistée par IA
-Docker introduit un **assistant IA** pour scanner les conteneurs existants et recommander ou appliquer automatiquement l'image durcie équivalente, réduisant la friction de migration.
-
-#### Exemple d'Implémentation
-
-Utilisation d'un build multi-stage pour déployer une application Go sur un conteneur statique générique :
+Ne livrez jamais vos outils de build en production. Utilisez les builds multi-stage pour séparer strictement ces deux phases dans un seul Dockerfile.
 
 \`\`\`dockerfile
-# Build Stage
-FROM golang:1.21 as builder
-WORKDIR /app
+# --- Stage 1: Build (L'Usine) ---
+# Image complète avec tous les outils nécessaires
+FROM golang:1.21 AS builder
+WORKDIR /src
 COPY . .
-RUN go build -o myapp main.go
+# On compile un binaire statique
+RUN CGO_ENABLED=0 go build -o my-app main.go
 
-# Runtime Stage (Distroless)
-FROM gcr.io/distroless/static-debian11
-COPY --from=builder /app/myapp /
-CMD ["/myapp"]
+# --- Stage 2: Runtime (Le Produit) ---
+# On utilise Distroless: Pas de shell, pas de package manager
+FROM gcr.io/distroless/static-debian12
+COPY --from=builder /src/my-app /
+# Sécurité: Toujours tourner en non-root
+USER nonroot:nonroot
+CMD ["/my-app"]
 \`\`\`
+
+#### 3. Choisir la Bonne Saveur (Wolfi vs Distroless vs Alpine)
+
+| Type | Idéal Pour | Avantages | Inconvénients |
+| :--- | :--- | :--- | :--- |
+| **Distroless** (Google) | Go, Rust, Java, Python | Zéro bloat, **Pas de Shell** (Sécurité Max). | Difficile à debugger (nécessite \`kubectl debug\`). |
+| **Wolfi** (Chainguard) | Cloud Native Moderne | Focus **Zéro CVE**, paquets granulaires, SBOM natif. | Écosystème plus récent. |
+| **Alpine** | Node.js, PHP, General | Minuscule (~5MB), a \`apk\` et \`sh\`. | Utilise \`musl\` libc (problèmes DNS/Perf possibles). |
+| **Debian Slim** | Apps Legacy | Compatibilité maximale (glibc). | Contient encore \`apt\`/\`dpkg\` (surface d'attaque). |
+
+#### 4. Gérer les Vulnérabilités (Objectif "Zéro CVE")
+
+*   **Le Problème**: Les images stables classiques (Debian 11) mettent rarement à jour les paquets, créant du "bruit" avec des CVEs non corrigées de basse sévérité.
+*   **La Solution**: Utilisez **Wolfi** (ou Chainguard Images). C'est une "undistro" conçue pour les conteneurs qui vise le **Zéro CVE** par défaut grâce à des mises à jour quotidiennes.
     `,
     newsContext: 'Sortie des Docker Hardened Images (DHI), adoption de SLSA Niveau 3 et transition vers des images de base distroless/durcies par défaut.',
     securityTip: 'Mise à jour: Utilisez **Docker Scout** (GA Dec 2023) pour analyser vos images de base. Il offre une analyse plus fine que les scanners traditionnels en corrélant les CVEs avec l\'utilisation réelle dans votre application.'
@@ -1340,62 +1341,67 @@ spec:
     phase: SDLCPhase.DEPLOY,
     shortDesc: 'Admission controllers et deployment gates.',
     staticContent: `
-### Le Gatekeeper du Déploiement
+### Policy as Code: Le Guide d'Implémentation
 
-Les Admission Controllers interceptent les requêtes vers l'API server Kubernetes *avant* la persistance de l'objet, mais *après* l'authentification et l'autorisation de la requête.
+Les Admission Controllers interceptent les requêtes vers l'API Kubernetes *avant* la persistance. C'est ici que nous appliquons le "Contrat" défini lors du Design.
 
-#### OPA Gatekeeper vs Kyverno
-*   **OPA Gatekeeper**: Utilise **Rego**, un langage de requête spécialisé. Extrêmement puissant et flexible.
-*   **Kyverno**: Utilise des politiques Kubernetes Native (YAML). Plus facile à apprendre pour les admins K8s, mais légèrement moins flexible que Rego.
+#### 1. La Matrice : Qui, Où, Quand ?
 
-#### 1. Interdire les Conteneurs Root (Rego)
-Cette politique assure qu'aucun conteneur ne tourne en tant que User ID 0 (root), atténuant les risques d'évasion de conteneur.
+| Rôle | Action | Outil | Localisation |
+| :--- | :--- | :--- | :--- |
+| **Ingénieur Sécurité** | Rédige la Politique (Rego/YAML). | OPA / Kyverno | **Git Repository** (Policy Repo) |
+| **Ingénieur Plateforme** | Installe le Contrôleur & Applique. | Helm / ArgocD | **Cluster K8s** (Admission Controller) |
+| **Développeur** | Vérifie les violations en local/CI. | Conftest / Kyverno CLI | **Pipeline CI** (Shift Left) |
+
+#### 2. Implémentation Pas-à-Pas
+
+**Étape 1: Définir la Politique (Le Contrat)**
+Les politiques doivent être traitées comme du code. Elles vivent dans Git, sont versionnées et revues.
+*   *Exemple (Rego)*: "Toutes les images doivent venir de \`registry.corp.com\`".
 
 \`\`\`rego
+# policy/image_registry.rego
 package kubernetes.admission
-
 deny[msg] {
   input.request.kind.kind == "Pod"
-  container := input.request.object.spec.containers[_]
-  not container.securityContext.runAsNonRoot
-  msg := sprintf("Container '%v' must set runAsNonRoot to true.", [container.name])
+  image := input.request.object.spec.containers[_].image
+  not startswith(image, "registry.corp.com/")
+  msg := sprintf("Image '%v' vient d'un registre non approuvé.", [image])
 }
 \`\`\`
 
-#### 2. Forcer la Provenance de l'Image (Trusted Registry)
-Assurez-vous que toutes les images viennent de votre registre interne de confiance (ex: \`registry.corp.com\`) pour empêcher le pull d'images publiques malveillantes.
-
-\`\`\`rego
-package kubernetes.admission
-
-deny[msg] {
-  input.request.kind.kind == "Pod"
-  container := input.request.object.spec.containers[_]
-  not startswith(container.image, "registry.corp.com/")
-  msg := sprintf("Image '%v' comes from an untrusted registry.", [container.image])
-}
-\`\`\`
-
-#### 3. Exiger des Labels de Propriété (Ownership)
-Rendre obligatoire des labels comme \`cost-center\` ou \`team\` pour tous les Déploiements afin d'assurer la responsabilité.
-
-\`\`\`rego
-package kubernetes.admission
-
-deny[msg] {
-  input.request.kind.kind == "Deployment"
-  not input.request.object.metadata.labels["team"]
-  msg := "Deployments must have a 'team' label."
-}
-\`\`\`
-
-#### Shift Left: Tester avec Conftest
-N'attendez pas que le cluster vous rejette. Testez les politiques dans votre pipeline CI/CD avec \`conftest\`.
+**Étape 2: Tester dans la CI (Le Soft Gate)**
+N'attendez pas que le déploiement échoue. Faites échouer le build dans la CI/CD avec \`conftest\` (pour OPA) ou \`kyverno apply\`.
 
 \`\`\`bash
-# Exécuter dans la CI avant helm install
-conftest test -p policies/ deployment.yaml
+# .gitlab-ci.yml
+policy_check:
+  stage: test
+  image: openpolicyagent/conftest
+  script:
+    - conftest test --policy policy/ deployment.yaml
 \`\`\`
+
+**Étape 3: Auditer dans le Cluster (Le Dry Run)**
+Déployez la politique dans Kubernetes en mode **Warn/Audit** d'abord.
+*   **OPA Gatekeeper**: Définir \`enforcementAction: dryrun\`.
+*   **Kyverno**: Définir \`validationFailureAction: Audit\`.
+*   *But*: Surveiller les logs pendant une semaine pour voir ce qui *casserait*. Corriger les violations existantes.
+
+**Étape 4: Enforce (Le Hard Gate)**
+Une fois les logs propres, passez en mode **Enforce/Deny**. Maintenant, tout déploiement non conforme est rejeté par l'API Server.
+
+#### 3. Politiques Communes à Implémenter
+
+*   **Disallow Root**: Forcer \`runAsNonRoot: true\`.
+*   **Require Probes**: S'assurer que les sondes Liveness/Readiness existent.
+*   **Ownership Labels**: Rendre obligatoires les labels \`team\` ou \`cost-center\`.
+
+#### Recommandation: Le Déploiement Sûr
+**N'activez jamais une politique bloquante au Jour 1.**
+1.  **Semaine 1**: Déployer en mode \`Audit\`.
+2.  **Semaine 2**: Revue des logs (Splunk/Datadog). Contacter les équipes pour corriger.
+3.  **Semaine 3**: Passer en mode \`Enforce\`.
     `,
     newsContext: 'Mises à jour OPA/Gatekeeper (v3+), montée de Kyverno, et déplacement de la validation vers la gauche (CI pipeline) vs le cluster.',
     securityTip: 'Workflow: Utilisez **chain-bench** (par Aquasec) dans votre pipeline pour auditer votre stack software supply chain contre les benchmarks CIS Software Supply Chain.'
