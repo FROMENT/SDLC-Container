@@ -15,7 +15,7 @@ import { StrideGenerator } from './components/StrideGenerator';
 import { SettingsMenu, ThemeMode, LangMode } from './components/SettingsMenu';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { AboutPage } from './components/AboutPage';
-import { ShieldAlert, Info, Menu, ChevronRight, Container, Radio, Sparkles, ShoppingBag, ExternalLink, Eye, Cloud, Info as InfoIcon } from 'lucide-react';
+import { ShieldAlert, Info, Menu, ChevronRight, Container, Radio, Sparkles, ShoppingBag, ExternalLink, Eye, Cloud, Info as InfoIcon, Coffee } from 'lucide-react';
 
 type ViewMode = 'app' | 'about';
 
@@ -166,6 +166,7 @@ const App: React.FC = () => {
       // Merch
       'Shop Merch': 'Boutique',
       'Get the Kitten Tee': 'T-Shirt Chat Japonais',
+      'Buy me a Ramen': 'Paye-moi un Ramen',
 
       // About Page
       'About Container Security Guide': 'À propos du Guide de Sécurité',
@@ -382,6 +383,17 @@ const App: React.FC = () => {
                     {t('Get the Kitten Tee')}
                   </span>
                 </div>
+              </a>
+
+              <a 
+                href="https://ko-fi.com/newspace?donate=true"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-50 dark:bg-yellow-900/10 hover:bg-yellow-100 dark:hover:bg-yellow-900/20 text-yellow-700 dark:text-yellow-500 transition-colors border border-yellow-200 dark:border-yellow-800/30"
+                title={t('Buy me a Ramen')}
+              >
+                <Coffee className="w-4 h-4" />
+                <span className="text-xs font-bold hidden xl:inline">{t('Buy me a Ramen')}</span>
               </a>
 
               <span className="flex items-center gap-2 px-3 py-1 text-sm rounded-full border bg-gray-100 border-gray-300 text-gray-700 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-400 font-medium">

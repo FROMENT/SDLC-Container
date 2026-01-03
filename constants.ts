@@ -511,7 +511,7 @@ Tools like **Sealed Secrets** or **SOPS** allow you to store encrypted data in G
 Do not store the secret in Git at all. Store a reference (manifest) pointing to the real secret in a Vault.
 
 *   Commit an \`ExternalSecret\` custom resource to Git.
-*   It contains the *pointer* (e.g., "fetch secret \`db-pass\` from AWS Secrets Manager").
+*   Elle contient le *pointeur* (ex: "récupérer le secret \`db-pass\` depuis AWS Secrets Manager").
 *   The operator fetches the value and creates the Kubernetes Secret.
 *   *Result*: Git contains no sensitive data, only configuration.
 
@@ -856,7 +856,7 @@ La sécurité commence avec l'image de base. La "Bonne Façon" est de **découpl
 
 #### 1. Le "Bon Moment" : Build vs Runtime
 
-*   **Build Time**: Vous avez besoin de compilateurs (\`gcc\`, \`go\`), outils de build (\`make\`, \`maven\`, \`npm\`), et fichiers d'en-tête. Ils sont **lourds** et **dangereux** en production.
+*   **Build Time**: Vous avez besoin de compilateurs (\`gcc\`, \`go\`), outils de build (\`make\`, \`maven\`), et fichiers d'en-tête. Ils sont **lourds** et **dangereux** en production.
 *   **Runtime**: Vous n'avez besoin que de votre binaire compilé (ou bytecode) et des dépendances OS (glibc/musl). Vous n'avez *pas* besoin d'un shell (\`/bin/bash\`), gestionnaire de paquets (\`apt\`, \`apk\`), ou \`curl\`.
 
 #### 2. La Règle d'Or : Multi-Stage Builds
@@ -954,8 +954,21 @@ metadata:
 | **Policy Tests** | Build | \`opa test\` | **Non-régression** des politiques. |
 | **SAST** | Build | \`semgrep\` | Failles de code. |
 
-#### 3. Étiquetage Défensif
-Utilisez une politique pour **Bloquer** tout déploiement sans labels CI/CD (anti-Shadow IT).
+#### 3. Étiquetage Défensif (Anti-Shadow IT)
+Les objets sans labels sont des menaces. Ils peuvent être des correctifs manuels ("hotfixes") ou des déploiements malveillants invisibles pour GitOps.
+
+**Le "Filigrane GitOps"**:
+Assurez-vous que votre outil de CD (ArgoCD/Flux) ajoute des labels de suivi.
+
+\`\`\`yaml
+metadata:
+  labels:
+    # Suivi de Provenance - Identifie le code source exact
+    gitops.org/repo: "https://github.com/org/repo"
+    gitops.org/path: "manifests/prod"
+\`\`\`
+
+**Action**: Utilisez une politique pour **Bloquer** tout déploiement sans ces labels. Cela neutralise le Shadow IT en empêchant les \`kubectl apply\` manuels.
     `,
     newsContext: 'Mises à jour des Labels Recommandés Kubernetes, tendances "Policy Testing".',
     securityTip: 'Gouvernance : Forcez la présence du label `owner`. Si un pod crash, vous savez qui appeler.'
